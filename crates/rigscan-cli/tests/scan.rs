@@ -76,3 +76,11 @@ fn malformed_xml_exits_two_and_names_the_path() {
     assert_eq!(out.status.code(), Some(2));
     assert!(stderr(&out).contains("malformed.urdf"));
 }
+
+#[test]
+fn file_without_robot_element_exits_two() {
+    let out = scan(&["not-a-robot.urdf"]);
+
+    assert_eq!(out.status.code(), Some(2));
+    assert!(stderr(&out).contains("not-a-robot.urdf"));
+}

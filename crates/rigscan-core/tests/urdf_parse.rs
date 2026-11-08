@@ -59,3 +59,10 @@ fn transmission_does_not_cause_findings() {
 
     assert!(rigscan_core::lint(&robot).is_empty());
 }
+
+#[test]
+fn document_without_robot_element_is_an_error() {
+    for src in ["", "   \n", "<html><body/></html>"] {
+        assert!(parse_urdf(src).is_err(), "accepted {src:?}");
+    }
+}

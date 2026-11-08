@@ -32,6 +32,7 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
     // Only direct children of <robot> are links and joints; <transmission> and
     // <gazebo> contain <joint>/<link> elements that merely reference them.
     let mut depth = 0u32;
+    let mut seen_robot = false;
 
     loop {
         // Text between tags is its own event, so this is the offset of the next '<'.
@@ -51,7 +52,10 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
             _ => continue,
         };
         match (e.name().as_ref(), depth) {
-            ("robot", 0) => robot.name = attr(&e, "name")?,
+            ("robot", 0) => {
+                seen_robot = true;
+                robot.name = attr(&e, "name")?
+            }
             ("link", 1) => robot.links.push(Link {
                 name: attr(&e, "name")?.unwrap_or_default(),
                 span: span_at(src, start),
@@ -79,6 +83,9 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
         if opens {
             depth += 1;
         }
+    }
+    if !seen_robot {
+        return Err(ParseError("no <robot> element found".into()));
     }
     Ok(robot)
 }

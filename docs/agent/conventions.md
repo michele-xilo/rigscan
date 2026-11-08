@@ -23,9 +23,10 @@ author's machine.
 
 ## Code layout
 
-- `crates/rigscan-core/src/lib.rs`: types (`Span`, `Link`, `Joint`, `Urdf`,
-  `Finding`, `Severity`), `parse_urdf`, `lint`. Split into modules when it
-  grows; not before.
+- `crates/rigscan-core/src/`: `model.rs` (`Span`, `Link`, `Joint`, `Format`,
+  `Robot`, `ParseError`), `urdf.rs` (`parse_urdf`), `lint.rs` (`Finding`,
+  `Severity`, `lint` and the rules), `lib.rs` (re-exports). One module per
+  format parser; add `mjcf.rs`, `usd.rs` alongside.
 - `crates/rigscan-core/tests/`: `urdf_parse.rs`, `lint_rules.rs`.
 - Span: 1-based line and column, column counted in characters.
 - The core must stay WASM-compatible: no filesystem or threads in

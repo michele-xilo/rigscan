@@ -58,14 +58,29 @@ UsdPhysics only), SDF, mesh conversion, simulation.
 
 ## Status (update when it changes)
 
-- Done: workspace, `rigscan-core`, URDF parser (links, joints, spans),
+- Done: workspace, `rigscan-core` with a format-neutral `Robot` (#1), URDF parser (links, joints, spans, robot name),
   rules RS001-RS006 (structural), README, Apache-2.0 LICENSE.
 - Builds for `wasm32-unknown-unknown` (compile check only, not run in a
   browser).
 - Not done: CLI, inertials/limits/mesh parsing, physics rules, MJCF, conversion,
-  bindings, playground, remote repo.
+  bindings, playground.
 - Known gap: a self-closing `<joint .../>` leaves a half-built joint that the
   next joint silently replaces. Should become a lint finding.
+
+## Intended model shape (grows with parsers; do not add fields speculatively)
+
+`Robot { format, name, links, joints }` today. Planned additions, each added
+by the ticket whose parser needs it: inertials, joint types and limits,
+origins and mesh references (#5); geoms and actuators (MJCF, #11); USD prim
+data (#15); loss annotations (#18).
+
+Known risk for #11: an MJCF body can have several joints to its parent, or
+none. The model has one parent/child edge per joint, so RS004 would flag
+those. Decide then: chain through synthetic links, or give the child link a
+joint list.
+
+`span` is required on every element. #15 will probably make it optional,
+because `.usdc` has no line numbers.
 
 ## Rule index
 

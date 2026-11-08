@@ -59,3 +59,13 @@ fn transmission_does_not_cause_findings() {
 
     assert!(rigscan_core::lint(&robot).is_empty());
 }
+
+#[test]
+fn span_columns_count_characters_not_bytes() {
+    let src = "<robot name=\"r\">\n<link name=\"é\"/><link name=\"b\"/>\n</robot>";
+    let robot = parse_urdf(src).unwrap();
+
+    // `<link name="é"/>` is 16 characters but 17 bytes.
+    assert_eq!(robot.links[0].span, Span { line: 2, col: 1 });
+    assert_eq!(robot.links[1].span, Span { line: 2, col: 17 });
+}

@@ -27,6 +27,9 @@ author's machine.
   `Robot`, `ParseError`), `urdf.rs` (`parse_urdf`), `lint.rs` (`Finding`,
   `Severity`, `lint` and the rules), `lib.rs` (re-exports). One module per
   format parser; add `mjcf.rs`, `usd.rs` alongside.
+- `crates/rigscan-cli/`: binary `rigscan` (clap). File reading, format detection
+  by extension and exit codes live here. Tests run the real binary against
+  `tests/fixtures/`.
 - `crates/rigscan-core/tests/`: `urdf_parse.rs`, `lint_rules.rs`.
 - Span: 1-based line and column, column counted in characters.
 - The core must stay WASM-compatible: no filesystem or threads in

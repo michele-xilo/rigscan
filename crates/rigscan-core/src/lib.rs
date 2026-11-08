@@ -96,3 +96,36 @@ pub fn parse_urdf(src: &str) -> Result<Urdf, ParseError> {
     }
     Ok(urdf)
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Severity {
+    Warning,
+    Critical,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Finding {
+    pub rule: &'static str,
+    pub severity: Severity,
+    pub message: String,
+    pub span: Span,
+}
+
+/// Run all lint rules over a parsed robot.
+pub fn lint(robot: &Urdf) -> Vec<Finding> {
+    let mut findings = Vec::new();
+    // RS001: joint references a link that is not defined.
+    for j in &robot.joints {
+        for (role, name) in [("parent", &j.parent), ("child", &j.child)] {
+            if !robot.links.iter().any(|l| &l.name == name) {
+                findings.push(Finding {
+                    rule: "RS001",
+                    severity: Severity::Critical,
+                    message: format!("joint `{}` {role} link `{name}` is not defined", j.name),
+                    span: j.span,
+                });
+            }
+        }
+    }
+    findings
+}

@@ -1,4 +1,4 @@
-use rigscan_core::{parse_urdf, Span};
+use rigscan_core::{parse_urdf, Format, Span};
 
 const URDF: &str = r#"<robot name="demo">
   <link name="base"/>
@@ -23,4 +23,12 @@ fn parses_links_and_joints_with_spans() {
         ("j1", "base", "arm")
     );
     assert_eq!(j.span, Span { line: 4, col: 3 });
+}
+
+#[test]
+fn reads_format_and_robot_name() {
+    let robot = parse_urdf(URDF).unwrap();
+
+    assert_eq!(robot.format, Format::Urdf);
+    assert_eq!(robot.name.as_deref(), Some("demo"));
 }

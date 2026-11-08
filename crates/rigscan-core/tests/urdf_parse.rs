@@ -32,3 +32,30 @@ fn reads_format_and_robot_name() {
     assert_eq!(robot.format, Format::Urdf);
     assert_eq!(robot.name.as_deref(), Some("demo"));
 }
+
+const WITH_TRANSMISSION: &str = r#"<robot name="demo">
+  <link name="base"/>
+  <link name="arm"/>
+  <joint name="j1" type="revolute">
+    <parent link="base"/>
+    <child link="arm"/>
+  </joint>
+  <transmission name="t1">
+    <joint name="j1"><hardwareInterface>EffortJointInterface</hardwareInterface></joint>
+  </transmission>
+</robot>"#;
+
+#[test]
+fn transmission_joint_reference_is_not_a_joint() {
+    let robot = parse_urdf(WITH_TRANSMISSION).unwrap();
+
+    assert_eq!(robot.joints.len(), 1);
+    assert_eq!(robot.joints[0].parent, "base");
+}
+
+#[test]
+fn transmission_does_not_cause_findings() {
+    let robot = parse_urdf(WITH_TRANSMISSION).unwrap();
+
+    assert!(rigscan_core::lint(&robot).is_empty());
+}

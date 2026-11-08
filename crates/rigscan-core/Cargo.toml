@@ -1,0 +1,9 @@
+[package]
+name = "rigscan-core"
+description = "Parsers, model and lint rules for robot description files"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+quick-xml = "0.42.0"

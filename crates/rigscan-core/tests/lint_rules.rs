@@ -32,7 +32,11 @@ fn run(body: &str) -> Vec<rigscan_core::Finding> {
 }
 
 fn only(findings: &[rigscan_core::Finding], rule: &str) -> Vec<rigscan_core::Finding> {
-    findings.iter().filter(|f| f.rule == rule).cloned().collect()
+    findings
+        .iter()
+        .filter(|f| f.rule == rule)
+        .cloned()
+        .collect()
 }
 
 fn joint(name: &str, parent: &str, child: &str) -> String {

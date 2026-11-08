@@ -18,6 +18,9 @@ fn parses_links_and_joints_with_spans() {
     assert_eq!(robot.links[1].span, Span { line: 3, col: 3 });
 
     let j = &robot.joints[0];
-    assert_eq!((j.name.as_str(), j.parent.as_str(), j.child.as_str()), ("j1", "base", "arm"));
+    assert_eq!(
+        (j.name.as_str(), j.parent.as_str(), j.child.as_str()),
+        ("j1", "base", "arm")
+    );
     assert_eq!(j.span, Span { line: 4, col: 3 });
 }

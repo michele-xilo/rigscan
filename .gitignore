@@ -1,1 +1,4 @@
 target/
+
+# Downloaded by scripts/fetch-corpus.sh
+/corpus/

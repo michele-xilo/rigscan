@@ -39,6 +39,9 @@ rustup target add wasm32-unknown-unknown
 cargo test --workspace
 ```
 
+For the end-to-end tests on real robots, run `scripts/fetch-corpus.sh` once; it
+downloads about 2.6 MB into the gitignored `corpus/`. Without it those tests skip.
+
 Optional tools: `cargo-llvm-cov` for coverage and `gitleaks` for the secret
 scan.
 

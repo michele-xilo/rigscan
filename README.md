@@ -68,6 +68,20 @@ cargo build -p rigscan-core --target wasm32-unknown-unknown
 
 Bug fixes start with a failing test.
 
+End-to-end tests run on 69 real robots (Unitree, Franka Panda, SO-101 and more)
+fetched from [example-robot-data](https://github.com/Gepetto/example-robot-data)
+into the gitignored `corpus/` directory. They lint every file, report
+parse and lint speed, then corrupt the files with a seeded generator (8 failure
+modes, equal counts) and check that every corruption is detected:
+
+```bash
+scripts/fetch-corpus.sh
+cargo test --release -p rigscan-core --test e2e_corpus -- --nocapture
+```
+
+Without the corpus the tests skip and say so; `RIGSCAN_REQUIRE_CORPUS=1` makes
+that a failure. `RIGSCAN_SEED=<n>` reruns the corruptions with another seed.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and the [style guide](STYLE_GUIDE.md).

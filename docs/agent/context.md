@@ -106,3 +106,12 @@ because `.usdc` has no line numbers.
 
 Planned next: mass <= 0, inertia triangle inequality, inverted joint limits,
 unresolved mesh paths, mimic joints with bad references, units/scale sanity.
+
+## End-to-end corpus
+
+- `scripts/fetch-corpus.sh` downloads 69 URDFs from Gepetto/example-robot-data at a pinned commit into
+  gitignored `corpus/`. The file list is `scripts/corpus-urdf.txt`.
+- `crates/rigscan-core/tests/e2e_corpus.rs`: lint every file (must be clean), perf report, then 200 seeded
+  corruptions (8 modes x 25), each must be detected. Modes: RS001-RS006, invalid number, truncated XML.
+- Known: `ur_description/urdf/ur3.urdf` is an empty robot and lints clean (issue 43).
+- Only URDF exists; MJCF and USD corpora wait for their parsers.

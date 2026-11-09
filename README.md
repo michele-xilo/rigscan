@@ -1,5 +1,7 @@
 # Rigscan
 
+[![codecov](https://codecov.io/gh/michele-xilo/rigscan/branch/main/graph/badge.svg)](https://codecov.io/gh/michele-xilo/rigscan)
+
 A health check for robot descriptions.
 
 Rigscan scans robot description files, reports what is wrong with them, and

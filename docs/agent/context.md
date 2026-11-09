@@ -63,8 +63,8 @@ UsdPhysics only), SDF, mesh conversion, simulation.
 - Builds for `wasm32-unknown-unknown` (compile check only, not run in a
   browser).
 - CLI: `rigscan scan <files>` (#2): `path:line:col: severity RULE: message`, exit 0/1/2. No report layer yet (#3).
-- Not done: inertials/limits/mesh parsing, physics rules, MJCF, conversion,
-  bindings, playground.
+- MJCF: `parse_mjcf` gives a resolved element tree (include spliced in, default classes applied), not yet mapped onto `Robot` (#11) and with no MJCF rules or CLI support yet.
+- Not done: MJCF mapping and rules, conversion, bindings, playground.
 - A self-closing `<joint .../>` or a joint missing `<parent>`/`<child>` is kept
   with empty endpoints and reported by RS001 ("has no parent link").
 
@@ -97,6 +97,16 @@ joint list.
 
 `span` is required on every element. #15 will probably make it optional,
 because `.usdc` has no line numbers.
+
+## MJCF tree
+
+`parse_mjcf(src, &dyn IncludeLoader) -> Mjcf { root, unresolved_includes, unknown_classes }`. `MjcfNode { tag, attrs,
+children, span, file }`; `file` is the include the element came from, `None` for the main file. An `<include>` is
+replaced by the children of the included `<mujoco>` root; the loader receives the path as written, so the core
+does no file access. An include the loader cannot supply is recorded, not an error. An element takes its class
+from its own `class`, else the nearest `childclass`, else `main`; attributes it does not set are filled from that
+class's default for its tag, then from parent classes. Nesting is capped at 256 levels (counted across includes) and
+include depth at 16, because the passes recurse and CLI worker threads have 2 MiB stacks.
 
 ## Rule index
 

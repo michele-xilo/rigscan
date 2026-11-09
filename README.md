@@ -10,8 +10,8 @@ Rigscan scans robot description files, reports what is wrong with them, and
 The core is written in Rust and is designed to run as a CLI, in the browser via
 WebAssembly, and from Python.
 
-> **Status: pre-alpha.** URDF parsing, thirteen lint rules and a `scan`
-> command exist. There is no MJCF or USD support, no conversion, and nothing is
+> **Status: pre-alpha.** URDF parsing, fifteen lint rules and a `scan`
+> command exist. There is no MJCF linting or USD support, no conversion, and nothing is
 > published yet. The API will change.
 
 ## What works today
@@ -40,6 +40,9 @@ WebAssembly, and from Python.
     from the URDF's directory, and `package://name/...` in the nearest parent
     directory called `name`; a package it cannot locate is not reported
   - `RS015` a `<mimic>` of a joint that does not exist, or of the joint itself
+- `parse_mjcf` reads MJCF into an element tree with line and column spans, splicing in `include`d files
+  through a caller-supplied loader and applying `default` classes. It is a library function only: there
+  are no MJCF rules and the CLI does not scan MJCF yet.
 - `rigscan-core` compiles for `wasm32-unknown-unknown`.
 
 ```bash

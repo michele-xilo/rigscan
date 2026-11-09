@@ -265,7 +265,7 @@ fn child_ctx(parent: Option<Ctx>, name: &str) -> Ctx {
 /// Turns byte offsets into line and column. Offsets arrive in increasing
 /// order, so each call only scans the text since the previous one; rescanning
 /// from the start of the file made parsing quadratic.
-struct Spans<'a> {
+pub(crate) struct Spans<'a> {
     src: &'a str,
     offset: usize,
     line: u32,
@@ -273,7 +273,7 @@ struct Spans<'a> {
 }
 
 impl<'a> Spans<'a> {
-    fn new(src: &'a str) -> Self {
+    pub(crate) fn new(src: &'a str) -> Self {
         Spans {
             src,
             offset: 0,
@@ -282,7 +282,7 @@ impl<'a> Spans<'a> {
         }
     }
 
-    fn at(&mut self, offset: usize) -> Span {
+    pub(crate) fn at(&mut self, offset: usize) -> Span {
         if offset < self.offset {
             *self = Spans::new(self.src);
         }

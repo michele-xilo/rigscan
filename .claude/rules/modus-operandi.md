@@ -69,8 +69,8 @@ rather than claim it works.
 
 - Design and decisions for a change are written on its GitHub issue (the approved plan as a comment, later
   decisions as further comments).
-- `docs/` holds what users need: how to run it, formats, rules. `docs/agent/` holds notes for agents. Keep
-  `docs/agent/decisions.md` in step when a decision changes, with the reason.
+- `docs/` holds what users need: how to run it, formats, rules. `docs/agent/` holds present-tense context
+  and conventions for agents. Decisions, plans and status are not committed: see `issue-tracking.md`.
 
 ## Data
 

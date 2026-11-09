@@ -51,6 +51,20 @@ Size: `size:S` under a day, `size:M` a few days, `size:L` more than that or need
 ## Closing the loop
 
 - A PR that fixes an issue says `Closes #n`.
-- A decision taken while working on an issue goes on that issue as a comment, and in
-  `docs/agent/decisions.md` if it changes a standing decision.
+- A decision taken while working on an issue goes on that issue as a comment (see below).
 - Do not close an issue because a PR is open; it closes when the work merges.
+
+## Decisions and plans live on issues, not in the repo
+
+The repo describes how things are now. The history of how it got there lives on GitHub issues.
+
+- Do not commit files that record past decisions, plans, status updates, session notes, "what we did" or
+  "known gaps" lists. Comment on the relevant issue instead (the approved plan, each later decision with
+  its reason, the result). If there is no issue, file one first.
+- Docs in the repo are present tense and stand on their own: how to run it, the formats, the rules, the
+  conventions in force. A convention that changes is edited in place; the reason for the change goes on the
+  issue.
+- A code comment may state a lasting reason (a format quirk, a measured choice). It does not narrate a past
+  change, and it does not cite issues or PRs.
+- A PR description says what changed and the evidence; it is not where a decision is kept either. Put the
+  decision on the issue and link it.

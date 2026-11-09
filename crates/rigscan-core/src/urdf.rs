@@ -1,31 +1,25 @@
 //! URDF parser.
 
-use crate::model::{Format, Joint, Link, ParseError, Robot, Span};
+use crate::model::{
+    Format, Inertia, Inertial, Joint, JointKind, Limit, Link, MeshRef, Mimic, ParseError, Robot,
+    Span,
+};
+use quick_xml::events::BytesStart;
+use std::borrow::Cow;
 
 /// Parse a URDF document, keeping the source span of every link and joint.
 pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
-    use quick_xml::events::{BytesStart, Event};
+    use quick_xml::events::Event;
     use quick_xml::Reader;
-
-    fn attr(e: &BytesStart, key: &str) -> Result<Option<String>, ParseError> {
-        match e.try_get_attribute(key) {
-            Ok(Some(a)) => a
-                .normalized_value(quick_xml::XmlVersion::Implicit1_0)
-                .map(|v| Some(v.into_owned()))
-                .map_err(|err| ParseError(err.to_string())),
-            Ok(None) => Ok(None),
-            Err(err) => Err(ParseError(err.to_string())),
-        }
-    }
 
     let mut reader = Reader::from_str(src);
     let mut spans = Spans::new(src);
     let mut robot = Robot::new(Format::Urdf);
     let mut joint: Option<Joint> = None;
 
-    // Only direct children of <robot> are links and joints; <transmission> and
-    // <gazebo> contain <joint>/<link> elements that merely reference them.
-    let mut depth = 0u32;
+    // Elements are matched by their parent, so a <joint> inside <transmission>
+    // or a <link> inside <gazebo>, which only reference the real ones, is ignored.
+    let mut stack: Vec<Ctx> = Vec::new();
     let mut seen_robot = false;
 
     loop {
@@ -35,9 +29,8 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
         let (e, opens) = match event {
             Event::Start(e) => (e, true),
             Event::Empty(e) => (e, false),
-            Event::End(e) => {
-                depth = depth.saturating_sub(1);
-                if depth == 1 && e.name().as_ref() == "joint" {
+            Event::End(_) => {
+                if stack.pop() == Some(Ctx::Joint) {
                     robot.joints.extend(joint.take());
                 }
                 continue;
@@ -45,43 +38,214 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
             Event::Eof => break,
             _ => continue,
         };
-        match (e.name().as_ref(), depth) {
-            ("robot", 0) => {
+        let qname = e.name();
+        let name = qname.as_ref();
+        let parent = stack.last().copied();
+        match (parent, name) {
+            (None, "robot") => {
                 seen_robot = true;
                 robot.name = attr(&e, "name")?
             }
-            ("link", 1) => robot.links.push(Link {
+            (Some(Ctx::Robot), "link") => robot.links.push(Link {
                 name: attr(&e, "name")?.unwrap_or_default(),
+                inertial: None,
+                meshes: Vec::new(),
                 span: spans.at(start),
             }),
-            ("joint", 1) => {
+            (Some(Ctx::Robot), "joint") => {
                 joint = Some(Joint {
                     name: attr(&e, "name")?.unwrap_or_default(),
                     parent: String::new(),
                     child: String::new(),
+                    kind: joint_kind(attr_ref(&e, "type")?),
+                    origin: Default::default(),
+                    limit: None,
+                    mimic: None,
                     span: spans.at(start),
                 })
             }
-            ("parent", 2) => {
+            (Some(Ctx::Link), "inertial") => {
+                if let Some(l) = robot.links.last_mut() {
+                    l.inertial = Some(Inertial::default());
+                }
+            }
+            (Some(Ctx::Inertial), "mass") => {
+                let mass = at(number(&e, "value"), &mut spans, start)?;
+                if let Some(i) = robot.links.last_mut().and_then(|l| l.inertial.as_mut()) {
+                    i.mass = mass;
+                }
+            }
+            (Some(Ctx::Inertial), "inertia") => {
+                let inertia = Inertia {
+                    ixx: at(required(&e, "ixx"), &mut spans, start)?,
+                    ixy: at(required(&e, "ixy"), &mut spans, start)?,
+                    ixz: at(required(&e, "ixz"), &mut spans, start)?,
+                    iyy: at(required(&e, "iyy"), &mut spans, start)?,
+                    iyz: at(required(&e, "iyz"), &mut spans, start)?,
+                    izz: at(required(&e, "izz"), &mut spans, start)?,
+                };
+                if let Some(i) = robot.links.last_mut().and_then(|l| l.inertial.as_mut()) {
+                    i.inertia = Some(inertia);
+                }
+            }
+            (Some(Ctx::Geometry), "mesh") => {
+                let filename = at(required_str(&e, "filename"), &mut spans, start)?;
+                let span = spans.at(start);
+                if let Some(l) = robot.links.last_mut() {
+                    l.meshes.push(MeshRef { filename, span });
+                }
+            }
+            (Some(Ctx::Joint), "parent") => {
                 if let Some(j) = joint.as_mut() {
                     j.parent = attr(&e, "link")?.unwrap_or_default();
                 }
             }
-            ("child", 2) => {
+            (Some(Ctx::Joint), "child") => {
                 if let Some(j) = joint.as_mut() {
                     j.child = attr(&e, "link")?.unwrap_or_default();
+                }
+            }
+            (Some(Ctx::Joint), "origin") => {
+                if let Some(j) = joint.as_mut() {
+                    if let Some(v) = at(vec3(&e, "xyz"), &mut spans, start)? {
+                        j.origin.xyz = v;
+                    }
+                    if let Some(v) = at(vec3(&e, "rpy"), &mut spans, start)? {
+                        j.origin.rpy = v;
+                    }
+                }
+            }
+            (Some(Ctx::Joint), "limit") => {
+                if let Some(j) = joint.as_mut() {
+                    j.limit = Some(Limit {
+                        lower: at(number(&e, "lower"), &mut spans, start)?,
+                        upper: at(number(&e, "upper"), &mut spans, start)?,
+                        effort: at(number(&e, "effort"), &mut spans, start)?,
+                        velocity: at(number(&e, "velocity"), &mut spans, start)?,
+                    });
+                }
+            }
+            (Some(Ctx::Joint), "mimic") => {
+                if let Some(j) = joint.as_mut() {
+                    j.mimic = Some(Mimic {
+                        joint: attr(&e, "joint")?.unwrap_or_default(),
+                        multiplier: at(number(&e, "multiplier"), &mut spans, start)?,
+                        offset: at(number(&e, "offset"), &mut spans, start)?,
+                    });
                 }
             }
             _ => {}
         }
         if opens {
-            depth += 1;
+            stack.push(child_ctx(parent, name));
         }
     }
     if !seen_robot {
         return Err(ParseError("no <robot> element found".into()));
     }
     Ok(robot)
+}
+
+/// The attribute value, borrowed from the source unless it needed unescaping.
+fn attr_ref<'a>(e: &'a BytesStart, key: &str) -> Result<Option<Cow<'a, str>>, ParseError> {
+    match e.try_get_attribute(key) {
+        Ok(Some(a)) => a
+            .normalized_value(quick_xml::XmlVersion::Implicit1_0)
+            .map(Some)
+            .map_err(|err| ParseError(err.to_string())),
+        Ok(None) => Ok(None),
+        Err(err) => Err(ParseError(err.to_string())),
+    }
+}
+
+fn attr(e: &BytesStart, key: &str) -> Result<Option<String>, ParseError> {
+    Ok(attr_ref(e, key)?.map(Cow::into_owned))
+}
+
+fn number(e: &BytesStart, key: &str) -> Result<Option<f64>, ParseError> {
+    match attr_ref(e, key)? {
+        None => Ok(None),
+        Some(v) => v
+            .trim()
+            .parse::<f64>()
+            .ok()
+            // Rust accepts nan and inf; they would slip past every later comparison.
+            .filter(|n| n.is_finite())
+            .map(Some)
+            .ok_or_else(|| ParseError(format!("invalid number `{v}` in attribute `{key}`"))),
+    }
+}
+
+fn required(e: &BytesStart, key: &str) -> Result<f64, ParseError> {
+    number(e, key)?.ok_or_else(|| ParseError(format!("missing attribute `{key}`")))
+}
+
+fn required_str(e: &BytesStart, key: &str) -> Result<String, ParseError> {
+    attr(e, key)?.ok_or_else(|| ParseError(format!("missing attribute `{key}`")))
+}
+
+fn vec3(e: &BytesStart, key: &str) -> Result<Option<[f64; 3]>, ParseError> {
+    let Some(v) = attr_ref(e, key)? else {
+        return Ok(None);
+    };
+    let nums = v
+        .split_whitespace()
+        .map(str::parse::<f64>)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| ParseError(format!("invalid number in `{v}` in attribute `{key}`")))?;
+    match nums[..] {
+        [x, y, z] => Ok(Some([x, y, z])),
+        _ => Err(ParseError(format!(
+            "attribute `{key}` needs 3 numbers, found {}",
+            nums.len()
+        ))),
+    }
+}
+
+fn joint_kind(ty: Option<Cow<str>>) -> JointKind {
+    match ty.as_deref() {
+        Some("revolute") => JointKind::Revolute,
+        Some("continuous") => JointKind::Continuous,
+        Some("prismatic") => JointKind::Prismatic,
+        Some("fixed") => JointKind::Fixed,
+        Some("floating") => JointKind::Floating,
+        Some("planar") => JointKind::Planar,
+        Some(other) => JointKind::Other(other.to_string()),
+        None => JointKind::Other(String::new()),
+    }
+}
+
+/// Prefix an attribute error with the line and column of its element.
+fn at<T>(r: Result<T, ParseError>, spans: &mut Spans, start: usize) -> Result<T, ParseError> {
+    r.map_err(|ParseError(msg)| {
+        let s = spans.at(start);
+        ParseError(format!("{}:{}: {msg}", s.line, s.col))
+    })
+}
+
+/// Which kind of element we are inside; everything the parser does not read
+/// is `Other`, so its children are never mistaken for top-level ones.
+#[derive(Clone, Copy, PartialEq)]
+enum Ctx {
+    Robot,
+    Link,
+    Joint,
+    Inertial,
+    Shape,
+    Geometry,
+    Other,
+}
+
+fn child_ctx(parent: Option<Ctx>, name: &str) -> Ctx {
+    match (parent, name) {
+        (None, "robot") => Ctx::Robot,
+        (Some(Ctx::Robot), "link") => Ctx::Link,
+        (Some(Ctx::Robot), "joint") => Ctx::Joint,
+        (Some(Ctx::Link), "inertial") => Ctx::Inertial,
+        (Some(Ctx::Link), "visual" | "collision") => Ctx::Shape,
+        (Some(Ctx::Shape), "geometry") => Ctx::Geometry,
+        _ => Ctx::Other,
+    }
 }
 
 /// Turns byte offsets into line and column. Offsets arrive in increasing

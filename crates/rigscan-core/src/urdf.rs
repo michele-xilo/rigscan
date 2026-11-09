@@ -131,8 +131,10 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
                 }
             }
             (Some(Ctx::Joint), "mimic") => {
+                let span = spans.at(start);
                 if let Some(j) = joint.as_mut() {
                     j.mimic = Some(Mimic {
+                        span,
                         joint: attr(&e, "joint")?.unwrap_or_default(),
                         multiplier: at(number(&e, "multiplier"), &mut spans, start)?,
                         offset: at(number(&e, "offset"), &mut spans, start)?,

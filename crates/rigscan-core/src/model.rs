@@ -91,6 +91,7 @@ pub struct Mimic {
     pub joint: String,
     pub multiplier: Option<f64>,
     pub offset: Option<f64>,
+    pub span: Span,
 }
 
 /// The file format a [`Robot`] was read from.

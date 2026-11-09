@@ -1,6 +1,4 @@
-use rigscan_core::{
-    parse_urdf, Inertia, Inertial, Joint, JointKind, Limit, MeshRef, Mimic, Origin, Span,
-};
+use rigscan_core::{parse_urdf, Inertia, Inertial, Joint, JointKind, Limit, MeshRef, Origin, Span};
 
 fn joint_with(type_attr: &str, inner: &str) -> Joint {
     let src = format!(
@@ -100,12 +98,8 @@ fn mimic_reads_joint_multiplier_and_offset() {
     );
 
     assert_eq!(
-        j.mimic,
-        Some(Mimic {
-            joint: "other".into(),
-            multiplier: Some(2.0),
-            offset: Some(0.5),
-        })
+        j.mimic.map(|m| (m.joint, m.multiplier, m.offset)),
+        Some(("other".into(), Some(2.0), Some(0.5)))
     );
 }
 
@@ -114,12 +108,8 @@ fn mimic_with_only_a_joint_has_no_multiplier_or_offset() {
     let j = joint_with("type=\"revolute\"", "<mimic joint=\"other\"/>");
 
     assert_eq!(
-        j.mimic,
-        Some(Mimic {
-            joint: "other".into(),
-            multiplier: None,
-            offset: None,
-        })
+        j.mimic.map(|m| (m.joint, m.multiplier, m.offset)),
+        Some(("other".into(), None, None))
     );
 }
 

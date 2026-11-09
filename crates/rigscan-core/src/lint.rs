@@ -1,7 +1,7 @@
 //! Lint rules. Each rule reads a [`Robot`] and reports findings with source spans.
 
 use crate::files::Resolver;
-use crate::model::{Element, Joint, Link, Robot, Span};
+use crate::model::{Element, Format, Joint, Link, Robot, Span};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity {
@@ -123,15 +123,19 @@ fn tree_shape(robot: &Robot, out: &mut Vec<Finding>) {
     // child link -> first joint that parents it
     let mut parent_joint: HashMap<&str, (usize, &Joint)> = HashMap::new();
     for (i, j) in robot.joints.iter().enumerate() {
-        if parent_joint.contains_key(j.child.as_str()) {
-            out.push(critical(
+        match parent_joint.get(j.child.as_str()) {
+            // MJCF declares joints inside a body, so a body with several joints has them all
+            // between the same two links. A second parent is still wrong.
+            Some((_, first)) if robot.format == Format::Mjcf && first.parent == j.parent => {}
+            Some(_) => out.push(critical(
                 "RS004",
                 format!("link `{}` has more than one parent joint", j.child),
                 j.span,
                 Element::Joint(i),
-            ));
-        } else {
-            parent_joint.insert(&j.child, (i, j));
+            )),
+            None => {
+                parent_joint.insert(&j.child, (i, j));
+            }
         }
     }
 

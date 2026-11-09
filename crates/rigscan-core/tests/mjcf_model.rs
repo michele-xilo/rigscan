@@ -1,0 +1,309 @@
+use rigscan_core::{lint, parse_mjcf, Format, IncludeLoader, JointKind, Robot, Span};
+
+struct NoFiles;
+
+impl IncludeLoader for NoFiles {
+    fn load(&self, _file: &str) -> Option<String> {
+        None
+    }
+}
+
+fn robot(src: &str) -> Robot {
+    parse_mjcf(src, &NoFiles).unwrap().to_robot().unwrap()
+}
+
+fn rules(r: &Robot) -> Vec<&'static str> {
+    lint(r).iter().map(|f| f.rule).collect()
+}
+
+fn link_names(r: &Robot) -> Vec<&str> {
+    r.links.iter().map(|l| l.name.as_str()).collect()
+}
+
+/// (name, parent, child) of every joint.
+fn edges(r: &Robot) -> Vec<(&str, &str, &str)> {
+    r.joints
+        .iter()
+        .map(|j| (j.name.as_str(), j.parent.as_str(), j.child.as_str()))
+        .collect()
+}
+
+fn near(a: f64, b: f64) -> bool {
+    (a - b).abs() < 1e-9
+}
+
+#[test]
+fn robot_takes_its_name_and_format_from_the_file() {
+    let r = robot("<mujoco model=\"arm\"><worldbody/></mujoco>");
+    assert_eq!(r.format, Format::Mjcf);
+    assert_eq!(r.name.as_deref(), Some("arm"));
+    assert_eq!(link_names(&r), ["world"]);
+}
+
+#[test]
+fn bodies_become_links_under_a_world_root() {
+    let r = robot(
+        r#"<mujoco><worldbody>
+  <body name="a"><joint name="ja"/>
+    <body name="b"><joint name="jb"/></body>
+  </body>
+</worldbody></mujoco>"#,
+    );
+    assert_eq!(link_names(&r), ["world", "a", "b"]);
+    assert_eq!(edges(&r), [("ja", "world", "a"), ("jb", "a", "b")]);
+    assert_eq!(r.links[1].span, Span { line: 2, col: 3 });
+    assert_eq!(r.joints[0].span, Span { line: 2, col: 18 });
+}
+
+#[test]
+fn several_joints_on_one_body_stay_separate_joints_between_the_same_links() {
+    let r = robot(
+        r#"<mujoco><worldbody>
+  <body name="a"><joint name="slide" type="slide"/><joint name="turn"/></body>
+</worldbody></mujoco>"#,
+    );
+    assert_eq!(link_names(&r), ["world", "a"]);
+    assert_eq!(edges(&r), [("slide", "world", "a"), ("turn", "world", "a")]);
+    assert!(rules(&r).is_empty(), "{:?}", lint(&r));
+}
+
+#[test]
+fn body_without_a_joint_is_welded_to_its_parent_by_a_fixed_joint() {
+    let r = robot("<mujoco><worldbody><body name=\"a\"/></worldbody></mujoco>");
+    assert_eq!(edges(&r), [("a", "world", "a")]);
+    assert_eq!(r.joints[0].kind, JointKind::Fixed);
+    assert!(rules(&r).is_empty());
+}
+
+#[test]
+fn fixed_joint_name_never_collides_with_a_real_joint() {
+    let r = robot(
+        r#"<mujoco><worldbody>
+  <body name="a"><joint name="b"/><body name="b"/></body>
+</worldbody></mujoco>"#,
+    );
+    let names: Vec<&str> = r.joints.iter().map(|j| j.name.as_str()).collect();
+    let unique: std::collections::HashSet<_> = names.iter().collect();
+    assert_eq!(unique.len(), names.len(), "{names:?}");
+    assert!(rules(&r).is_empty(), "{:?}", lint(&r));
+}
+
+#[test]
+fn unnamed_bodies_and_joints_get_distinct_names() {
+    let r = robot(
+        r#"<mujoco><worldbody>
+  <body><joint/></body><body><joint/></body>
+</worldbody></mujoco>"#,
+    );
+    assert_eq!(r.links.len(), 3);
+    let l: std::collections::HashSet<_> = r.links.iter().map(|l| &l.name).collect();
+    let j: std::collections::HashSet<_> = r.joints.iter().map(|j| &j.name).collect();
+    assert_eq!((l.len(), j.len()), (3, 2));
+    assert!(rules(&r).is_empty(), "{:?}", lint(&r));
+}
+
+fn kind_of(joint: &str) -> JointKind {
+    let src = format!("<mujoco><worldbody><body name=\"a\">{joint}</body></worldbody></mujoco>");
+    robot(&src).joints[0].kind.clone()
+}
+
+#[test]
+fn joint_types_map_onto_neutral_kinds() {
+    assert_eq!(kind_of("<joint range=\"-10 10\"/>"), JointKind::Revolute);
+    assert_eq!(kind_of("<joint type=\"hinge\"/>"), JointKind::Continuous);
+    assert_eq!(kind_of("<joint type=\"slide\"/>"), JointKind::Prismatic);
+    assert_eq!(kind_of("<freejoint/>"), JointKind::Floating);
+    assert_eq!(kind_of("<joint type=\"free\"/>"), JointKind::Floating);
+    assert_eq!(
+        kind_of("<joint type=\"ball\"/>"),
+        JointKind::Other("ball".into())
+    );
+}
+
+#[test]
+fn hinge_range_is_read_in_degrees_by_default() {
+    let r = robot("<mujoco><worldbody><body name=\"a\"><joint range=\"-90 180\"/></body></worldbody></mujoco>");
+    let l = r.joints[0].limit.as_ref().unwrap();
+    assert!(near(l.lower.unwrap(), -std::f64::consts::FRAC_PI_2));
+    assert!(near(l.upper.unwrap(), std::f64::consts::PI));
+}
+
+#[test]
+fn compiler_angle_radian_keeps_hinge_range_as_written() {
+    let r = robot(
+        "<mujoco><compiler angle=\"radian\"/><worldbody><body name=\"a\"><joint range=\"-1 2\"/></body></worldbody></mujoco>",
+    );
+    let l = r.joints[0].limit.as_ref().unwrap();
+    assert_eq!((l.lower, l.upper), (Some(-1.0), Some(2.0)));
+}
+
+#[test]
+fn slide_range_is_never_converted_and_unlimited_joints_have_no_limit() {
+    let r = robot(
+        r#"<mujoco><worldbody><body name="a">
+  <joint name="s" type="slide" range="0 0.5"/><joint name="u" type="slide"/>
+</body></worldbody></mujoco>"#,
+    );
+    let l = r.joints[0].limit.as_ref().unwrap();
+    assert_eq!((l.lower, l.upper), (Some(0.0), Some(0.5)));
+    assert!(r.joints[1].limit.is_none());
+}
+
+#[test]
+fn explicit_limited_false_ignores_the_range() {
+    let r = robot("<mujoco><worldbody><body name=\"a\"><joint limited=\"false\" range=\"-1 1\"/></body></worldbody></mujoco>");
+    assert!(r.joints[0].limit.is_none());
+    assert_eq!(r.joints[0].kind, JointKind::Continuous);
+}
+
+#[test]
+fn slide_and_hinge_without_limits_are_not_reported_as_missing_limits() {
+    let r = robot(
+        r#"<mujoco><worldbody><body name="a">
+  <joint type="slide"/><joint type="hinge" range="-1 1"/>
+</body></worldbody></mujoco>"#,
+    );
+    assert!(rules(&r).is_empty(), "{:?}", lint(&r));
+}
+
+#[test]
+fn lower_range_above_upper_is_reported_for_mjcf_too() {
+    let r = robot("<mujoco><worldbody><body name=\"a\"><joint type=\"slide\" range=\"1 0\"/></body></worldbody></mujoco>");
+    assert_eq!(rules(&r), ["RS012"]);
+}
+
+#[test]
+fn body_position_becomes_the_joint_origin() {
+    let r = robot(
+        "<mujoco><worldbody><body name=\"a\" pos=\"1 2 3\"><joint/></body></worldbody></mujoco>",
+    );
+    assert_eq!(r.joints[0].origin.xyz, [1.0, 2.0, 3.0]);
+}
+
+#[test]
+fn inertial_maps_mass_and_diagonal_inertia() {
+    let r = robot(
+        "<mujoco><worldbody><body name=\"a\"><inertial mass=\"2\" pos=\"0 0 0\" diaginertia=\"1 2 3\"/></body></worldbody></mujoco>",
+    );
+    let i = r.links[1].inertial.as_ref().unwrap();
+    assert_eq!(i.mass, Some(2.0));
+    let t = i.inertia.unwrap();
+    assert_eq!(
+        (t.ixx, t.iyy, t.izz, t.ixy, t.ixz, t.iyz),
+        (1.0, 2.0, 3.0, 0.0, 0.0, 0.0)
+    );
+}
+
+#[test]
+fn inertial_maps_full_inertia_in_mujoco_order() {
+    let r = robot(
+        "<mujoco><worldbody><body name=\"a\"><inertial mass=\"1\" pos=\"0 0 0\" fullinertia=\"1 2 3 4 5 6\"/></body></worldbody></mujoco>",
+    );
+    let t = r.links[1].inertial.as_ref().unwrap().inertia.unwrap();
+    assert_eq!(
+        (t.ixx, t.iyy, t.izz, t.ixy, t.ixz, t.iyz),
+        (1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
+    );
+}
+
+#[test]
+fn body_without_inertial_has_none_because_mujoco_infers_it_from_geoms() {
+    let r =
+        robot("<mujoco><worldbody><body name=\"a\"><geom size=\"1\"/></body></worldbody></mujoco>");
+    assert!(r.links[1].inertial.is_none());
+}
+
+#[test]
+fn physics_rules_run_on_mjcf_inertials() {
+    let r = robot(
+        "<mujoco><worldbody><body name=\"a\"><joint/><inertial mass=\"-1\" pos=\"0 0 0\" diaginertia=\"1 1 1\"/></body></worldbody></mujoco>",
+    );
+    assert_eq!(rules(&r), ["RS008"]);
+}
+
+#[test]
+fn mesh_geoms_become_mesh_refs_joined_with_meshdir() {
+    let r = robot(
+        r#"<mujoco>
+  <compiler meshdir="assets"/>
+  <asset><mesh name="m" file="m.stl"/><mesh file="dir/other.obj"/></asset>
+  <worldbody><body name="a">
+    <geom type="mesh" mesh="m"/>
+    <geom mesh="other"/>
+  </body></worldbody>
+</mujoco>"#,
+    );
+    let m: Vec<(&str, u32)> = r.links[1]
+        .meshes
+        .iter()
+        .map(|m| (m.filename.as_str(), m.span.line))
+        .collect();
+    assert_eq!(m, [("assets/m.stl", 5), ("assets/dir/other.obj", 6)]);
+}
+
+#[test]
+fn unmapped_parts_are_kept_with_name_and_span() {
+    let r = robot(
+        r#"<mujoco>
+  <worldbody><body name="a" quat="1 0 0 0"><joint name="j"/><geom name="g" size="1"/></body></worldbody>
+  <actuator><motor name="m" joint="j"/></actuator>
+  <tendon><fixed name="t"/></tendon>
+</mujoco>"#,
+    );
+    let got: Vec<(&str, Option<&str>, u32)> = r
+        .unmapped
+        .iter()
+        .map(|u| (u.what.as_str(), u.name.as_deref(), u.span.line))
+        .collect();
+    assert!(got.contains(&("quat", Some("a"), 2)), "{got:?}");
+    assert!(got.contains(&("geom", Some("g"), 2)), "{got:?}");
+    assert!(got.contains(&("motor", Some("m"), 3)), "{got:?}");
+    assert!(got.contains(&("fixed", Some("t"), 4)), "{got:?}");
+}
+
+#[test]
+fn invalid_number_is_an_error_with_its_position() {
+    let e = parse_mjcf(
+        "<mujoco>\n<worldbody><body name=\"a\" pos=\"1 x 3\"/></worldbody></mujoco>",
+        &NoFiles,
+    )
+    .unwrap()
+    .to_robot()
+    .unwrap_err();
+    assert!(e.0.starts_with("2:"), "{}", e.0);
+}
+
+#[test]
+fn healthy_robot_has_no_findings() {
+    let r = robot(
+        r#"<mujoco model="r">
+  <default><joint range="-90 90"/></default>
+  <worldbody>
+    <body name="base" pos="0 0 1">
+      <inertial mass="1" pos="0 0 0" diaginertia="0.1 0.1 0.1"/>
+      <body name="arm"><joint axis="0 1 0"/><geom type="capsule" size="0.05"/></body>
+    </body>
+  </worldbody>
+</mujoco>"#,
+    );
+    assert!(rules(&r).is_empty(), "{:?}", lint(&r));
+}
+
+#[test]
+fn compiler_autolimits_false_needs_limited_true_for_a_range_to_count() {
+    let r = robot(
+        r#"<mujoco><compiler autolimits="false"/><worldbody><body name="a">
+  <joint name="x" type="slide" range="0 1"/><joint name="y" type="slide" range="0 1" limited="true"/>
+</body></worldbody></mujoco>"#,
+    );
+    assert!(r.joints[0].limit.is_none());
+    assert!(r.joints[1].limit.is_some());
+}
+
+#[test]
+fn bodies_inside_a_frame_are_reported_as_unmapped_not_dropped_silently() {
+    let r = robot(
+        "<mujoco><worldbody><frame name=\"f\"><body name=\"a\"/></frame></worldbody></mujoco>",
+    );
+    assert!(r.unmapped.iter().any(|u| u.what == "frame"));
+}

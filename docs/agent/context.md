@@ -63,8 +63,8 @@ UsdPhysics only), SDF, mesh conversion, simulation.
 - Builds for `wasm32-unknown-unknown` (compile check only, not run in a
   browser).
 - CLI: `rigscan scan <files>` (#2): `path:line:col: severity RULE: message`, exit 0/1/2. No report layer yet (#3).
-- MJCF: `parse_mjcf` gives a resolved element tree (include spliced in, default classes applied), not yet mapped onto `Robot` (#11) and with no MJCF rules or CLI support yet.
-- Not done: MJCF mapping and rules, conversion, bindings, playground.
+- MJCF: `parse_mjcf` gives a resolved element tree (#10) and `Mjcf::to_robot` maps it onto `Robot` (#11). No MJCF-specific rules and no CLI support yet.
+- Not done: MJCF rules and CLI scanning, conversion, bindings, playground.
 - A self-closing `<joint .../>` or a joint missing `<parent>`/`<child>` is kept
   with empty endpoints and reported by RS001 ("has no parent link").
 
@@ -108,6 +108,26 @@ from its own `class`, else the nearest `childclass`, else `main`; attributes it 
 class's default for its tag, then from parent classes. Nesting is capped at 256 levels (counted across includes) and
 include depth at 16, because the passes recurse and CLI worker threads have 2 MiB stacks.
 
+## MJCF to the neutral model
+
+The robot's structure is kept as written; no links are invented for joints. `<worldbody>` is the root link `world`.
+Each `<joint>` is one `Joint` from the parent body's link to the body's own, so a body with several joints has
+several joints between the same two links, in document order. A body with no joint gets a fixed joint named after
+the body (made unique against real joint names), as MuJoCo welds it. Unnamed bodies and joints get generated names.
+Kinds: `hinge` is `Revolute` with a `range` and `Continuous` without; `slide` is `Prismatic`; `free` is `Floating`;
+`ball` and anything else is `Other`. Hinge `range` is converted from degrees to radians unless
+`<compiler angle="radian">`; `autolimits` and `limited` decide whether `range` counts. Body `pos` is the joint
+origin. A body without `<inertial>` has no inertial because MuJoCo infers it from geoms. Mesh geoms become
+`MeshRef`s joined with `meshdir`.
+
+`Robot.unmapped` lists what the model cannot hold, with name and span, for the loss report (#18): actuators,
+tendons, equality constraints, contacts, sensors, keyframes, primitive geoms, body orientation (`quat`, `euler`,
+`axisangle`, `xyaxes`, `zaxis`; rotation is not converted, so `rpy` stays zero) and anything inside `frame`,
+`replicate`, `attach`, `composite` or `flexcomp`, which are not expanded.
+
+RS004 accepts several joints between the same two links for MJCF and still flags a link reached from two different
+parents. RS013 applies to URDF only: MJCF joints may be unlimited and have no effort or velocity.
+
 ## Rule index
 
 | ID | Severity | Meaning |
@@ -115,7 +135,7 @@ include depth at 16, because the passes recurse and CLI worker threads have 2 Mi
 | RS001 | critical | joint references an undefined parent/child link, or has none |
 | RS002 | critical | duplicate link name |
 | RS003 | critical | duplicate joint name |
-| RS004 | critical | link has more than one parent joint (flagged on the extra joint) |
+| RS004 | critical | link has more than one parent joint (flagged on the extra joint); in MJCF, joints from the same parent do not count |
 | RS005 | critical | kinematic loop |
 | RS006 | critical | more than one root link (flagged on each extra root) |
 | RS007 | critical | robot has no links (flagged on the robot element) |
@@ -124,7 +144,7 @@ include depth at 16, because the passes recurse and CLI worker threads have 2 Mi
 | RS010 | critical | negative principal moment, from the full tensor; tensors with every moment under 1e-12 are ignored |
 | RS011 | warning | principal moments break A + B >= C (a flat plate, A + B == C, is valid) |
 | RS012 | critical | revolute/prismatic `lower` above `upper` |
-| RS013 | critical | revolute/prismatic joint without `<limit>`, or a limit without `effort` or `velocity` |
+| RS013 | critical | URDF only: revolute/prismatic joint without `<limit>`, or a limit without `effort` or `velocity` |
 | RS014 | critical | mesh file not found (flagged on the `<mesh>` element); only when the caller passes a `Resolver` to `lint_with`, and never when it answers `Unknown` |
 | RS015 | critical | `<mimic>` of an undefined joint or of the joint itself (flagged on the `<mimic>` element) |
 

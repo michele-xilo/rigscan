@@ -98,6 +98,7 @@ pub struct Mimic {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
     Urdf,
+    Mjcf,
 }
 
 /// A robot description, independent of the format it was read from.
@@ -111,6 +112,18 @@ pub struct Robot {
     pub span: Span,
     pub links: Vec<Link>,
     pub joints: Vec<Joint>,
+    /// Parts of the source the model cannot hold, kept so a conversion can report them as lost.
+    pub unmapped: Vec<Unmapped>,
+}
+
+/// A source element or attribute the neutral model has no field for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unmapped {
+    /// The element tag, or the attribute name when only an attribute is lost.
+    pub what: String,
+    /// The element's `name`, or the name of the body the attribute was on.
+    pub name: Option<String>,
+    pub span: Span,
 }
 
 impl Robot {
@@ -121,6 +134,7 @@ impl Robot {
             span: Span { line: 1, col: 1 },
             links: Vec::new(),
             joints: Vec::new(),
+            unmapped: Vec::new(),
         }
     }
 }

@@ -1,6 +1,6 @@
 //! Looks up mesh references on the file system, relative to the URDF being scanned.
 
-use rigscan_core::{Resolution, Resolver};
+use rigscan_core::{IncludeLoader, Included, Resolution, Resolver};
 use std::path::{Path, PathBuf};
 
 pub struct FsResolver {
@@ -48,5 +48,34 @@ impl Resolver for FsResolver {
         } else {
             exists(self.dir.join(uri))
         }
+    }
+}
+
+/// Reads `<include>`d MJCF files from disk.
+pub struct FsLoader {
+    dir: PathBuf,
+}
+
+impl FsLoader {
+    pub fn for_file(file: &Path) -> Self {
+        FsLoader {
+            dir: file.parent().map(Path::to_path_buf).unwrap_or_default(),
+        }
+    }
+}
+
+impl IncludeLoader for FsLoader {
+    /// MuJoCo reads an include relative to the file that contains it, so a nested include
+    /// starts from the directory of `from`.
+    fn load(&self, file: &str, from: Option<&str>) -> Option<Included> {
+        let base = from
+            .and_then(|f| Path::new(f).parent())
+            .unwrap_or(&self.dir);
+        let path = base.join(file);
+        let text = std::fs::read_to_string(&path).ok()?;
+        Some(Included {
+            path: path.display().to_string(),
+            text,
+        })
     }
 }

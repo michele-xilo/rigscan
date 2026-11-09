@@ -11,7 +11,7 @@ The core is written in Rust and is designed to run as a CLI, in the browser via
 WebAssembly, and from Python.
 
 > **Status: pre-alpha.** URDF parsing, fifteen lint rules and a `scan`
-> command exist. There is no MJCF linting or USD support, no conversion, and nothing is
+> command exist. There is no MJCF-specific linting or USD support, no conversion, and nothing is
 > published yet. The API will change.
 
 ## What works today
@@ -43,7 +43,7 @@ WebAssembly, and from Python.
 - `parse_mjcf` reads MJCF into an element tree with line and column spans, splicing in `include`d files
   through a caller-supplied loader and applying `default` classes. `to_robot()` maps it onto the same model
   URDF uses, so the structural and physics rules run on it, and lists what the model cannot hold. It is a
-  library function only: there are no MJCF-specific rules and the CLI does not scan MJCF yet.
+  `rigscan scan` reads MJCF files too, with the shared rules and no MJCF-specific ones yet.
 - `rigscan-core` compiles for `wasm32-unknown-unknown`.
 
 ```bash
@@ -52,7 +52,7 @@ cargo run -p rigscan-cli -- scan robot.urdf
 ```
 
 `rigscan scan` takes files and directories (default: the current directory).
-Directories are searched recursively for supported files (`.urdf` for now),
+Directories are searched recursively for supported files (`.urdf`, and `.xml` files with a `<mujoco>` root),
 skipping anything in `.gitignore`; a file named on the command line is always
 scanned. Files are scanned in parallel and the output is sorted, so it is the
 same on every run. Findings go to stdout and a summary (`Found 3 findings in

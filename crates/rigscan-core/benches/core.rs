@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use rigscan_core::{lint, parse_mjcf, parse_urdf, report, IncludeLoader};
+use rigscan_core::{lint, parse_mjcf, parse_urdf, report, IncludeLoader, Included};
 use std::hint::black_box;
 
 /// A chain of `n` links joined by `n - 1` fixed joints, one element per line.
@@ -60,7 +60,7 @@ fn chain_mjcf(n: usize) -> String {
 struct NoFiles;
 
 impl IncludeLoader for NoFiles {
-    fn load(&self, _file: &str) -> Option<String> {
+    fn load(&self, _file: &str, _from: Option<&str>) -> Option<Included> {
         None
     }
 }

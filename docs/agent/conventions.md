@@ -35,6 +35,14 @@ author's machine.
 - The core must stay WASM-compatible: no filesystem or threads in
   `rigscan-core`. File reading belongs in the CLI crate.
 
+## Secrets
+
+CI runs gitleaks on the full history (`.github/workflows/secrets.yml`), and
+GitHub secret scanning with push protection is enabled on the repo. Run
+`gitleaks detect --source . --log-opts="--all" --redact` locally before
+pushing if you touched config or test fixtures. Never commit tokens, even
+fake-looking ones; use obviously invalid placeholders.
+
 ## Style
 
 - Findings use the clinical voice: name the element, state the cause.

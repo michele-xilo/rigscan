@@ -123,5 +123,14 @@ impl Robot {
     }
 }
 
+/// The part of a robot a finding is about. Links and joints are identified by position, so
+/// duplicate names still point at the right one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Element {
+    Robot,
+    Link(usize),
+    Joint(usize),
+}
+
 #[derive(Debug)]
 pub struct ParseError(pub String);

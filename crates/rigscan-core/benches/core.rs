@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use rigscan_core::{lint, parse_urdf};
+use rigscan_core::{lint, parse_urdf, report};
 use std::hint::black_box;
 
 /// A chain of `n` links joined by `n - 1` fixed joints, one element per line.
@@ -83,5 +83,21 @@ fn lint_all(c: &mut Criterion) {
     g.finish();
 }
 
-criterion_group!(benches, parse, parse_rich, lint_all);
+fn report_all(c: &mut Criterion) {
+    let mut g = c.benchmark_group("report");
+    g.sample_size(10);
+    for n in SIZES {
+        let robot = parse_urdf(&chain_urdf(n)).unwrap();
+        let findings = lint(&robot);
+        g.throughput(Throughput::Elements(
+            (robot.links.len() + robot.joints.len()) as u64,
+        ));
+        g.bench_with_input(BenchmarkId::from_parameter(n), &robot, |b, robot| {
+            b.iter(|| report(black_box(robot), black_box(&findings)))
+        });
+    }
+    g.finish();
+}
+
+criterion_group!(benches, parse, parse_rich, lint_all, report_all);
 criterion_main!(benches);

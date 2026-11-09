@@ -38,6 +38,23 @@ cargo run -p rigscan-cli -- scan robot.urdf
 are critical findings, and 2 when a file cannot be scanned. File type is
 detected from the extension (`.urdf` for now).
 
+`--output-format` picks the output:
+
+- `text` (default): one line per finding, as above.
+- `report`: a verdict line per file, then the status of every link and joint
+  with its findings underneath. There is no numeric score.
+- `json`: one document with `version`, `files` (verdict, element statuses and
+  findings with line and column, or an `error` for a file that could not be
+  scanned) and a `summary`.
+
+```bash
+cargo run -p rigscan-cli -- scan --output-format report robot.urdf
+# robot.urdf: 1 healthy, 0 warnings, 1 critical
+#   healthy  link  base
+#   critical joint j1
+#     robot.urdf:3:3: critical RS001: joint `j1` child link `ghost` is not defined
+```
+
 As a library:
 
 ```rust

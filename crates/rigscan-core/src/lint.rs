@@ -1,6 +1,6 @@
 //! Lint rules. Each rule reads a [`Robot`] and reports findings with source spans.
 
-use crate::model::{Joint, Link, Robot, Span};
+use crate::model::{Element, Joint, Link, Robot, Span};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity {
@@ -14,6 +14,7 @@ pub struct Finding {
     pub severity: Severity,
     pub message: String,
     pub span: Span,
+    pub element: Element,
 }
 
 /// Run all lint rules over a parsed robot.
@@ -22,7 +23,7 @@ pub fn lint(robot: &Robot) -> Vec<Finding> {
     // RS001: joint references a link that is not defined.
     let link_names: std::collections::HashSet<&str> =
         robot.links.iter().map(|l| l.name.as_str()).collect();
-    for j in &robot.joints {
+    for (i, j) in robot.joints.iter().enumerate() {
         for (role, name) in [("parent", &j.parent), ("child", &j.child)] {
             if !link_names.contains(name.as_str()) {
                 let message = if name.is_empty() {
@@ -35,25 +36,32 @@ pub fn lint(robot: &Robot) -> Vec<Finding> {
                     severity: Severity::Critical,
                     message,
                     span: j.span,
+                    element: Element::Joint(i),
                 });
             }
         }
     }
     // RS007: a robot without links has nothing to check, so every other rule passes vacuously.
     if robot.links.is_empty() {
-        findings.push(critical("RS007", "robot has no links".into(), robot.span));
+        findings.push(critical(
+            "RS007",
+            "robot has no links".into(),
+            robot.span,
+            Element::Robot,
+        ));
     }
     duplicate_names(robot, &mut findings);
     tree_shape(robot, &mut findings);
     findings
 }
 
-fn critical(rule: &'static str, message: String, span: Span) -> Finding {
+fn critical(rule: &'static str, message: String, span: Span, element: Element) -> Finding {
     Finding {
         rule,
         severity: Severity::Critical,
         message,
         span,
+        element,
     }
 }
 
@@ -61,22 +69,24 @@ fn critical(rule: &'static str, message: String, span: Span) -> Finding {
 fn duplicate_names(robot: &Robot, out: &mut Vec<Finding>) {
     use std::collections::HashSet;
     let mut seen = HashSet::new();
-    for l in &robot.links {
+    for (i, l) in robot.links.iter().enumerate() {
         if !seen.insert(l.name.as_str()) {
             out.push(critical(
                 "RS002",
                 format!("link `{}` is defined more than once", l.name),
                 l.span,
+                Element::Link(i),
             ));
         }
     }
     seen.clear();
-    for j in &robot.joints {
+    for (i, j) in robot.joints.iter().enumerate() {
         if !seen.insert(j.name.as_str()) {
             out.push(critical(
                 "RS003",
                 format!("joint `{}` is defined more than once", j.name),
                 j.span,
+                Element::Joint(i),
             ));
         }
     }
@@ -86,16 +96,17 @@ fn duplicate_names(robot: &Robot, out: &mut Vec<Finding>) {
 fn tree_shape(robot: &Robot, out: &mut Vec<Finding>) {
     use std::collections::HashMap;
     // child link -> first joint that parents it
-    let mut parent_joint: HashMap<&str, &Joint> = HashMap::new();
-    for j in &robot.joints {
+    let mut parent_joint: HashMap<&str, (usize, &Joint)> = HashMap::new();
+    for (i, j) in robot.joints.iter().enumerate() {
         if parent_joint.contains_key(j.child.as_str()) {
             out.push(critical(
                 "RS004",
                 format!("link `{}` has more than one parent joint", j.child),
                 j.span,
+                Element::Joint(i),
             ));
         } else {
-            parent_joint.insert(&j.child, j);
+            parent_joint.insert(&j.child, (i, j));
         }
     }
 
@@ -108,11 +119,12 @@ fn tree_shape(robot: &Robot, out: &mut Vec<Finding>) {
             match state.get(cur) {
                 Some(2) => break,
                 Some(1) => {
-                    let j = parent_joint[cur];
+                    let (ji, j) = parent_joint[cur];
                     out.push(critical(
                         "RS005",
                         format!("kinematic loop through link `{cur}`"),
                         j.span,
+                        Element::Joint(ji),
                     ));
                     break;
                 }
@@ -121,7 +133,7 @@ fn tree_shape(robot: &Robot, out: &mut Vec<Finding>) {
             state.insert(cur, 1);
             path.push(cur);
             match parent_joint.get(cur) {
-                Some(j) => cur = j.parent.as_str(),
+                Some((_, j)) => cur = j.parent.as_str(),
                 None => break,
             }
         }
@@ -131,12 +143,13 @@ fn tree_shape(robot: &Robot, out: &mut Vec<Finding>) {
     }
 
     // Every link that is nobody's child is a root; a tree has exactly one.
-    let roots: Vec<&Link> = robot
+    let roots: Vec<(usize, &Link)> = robot
         .links
         .iter()
-        .filter(|l| !parent_joint.contains_key(l.name.as_str()))
+        .enumerate()
+        .filter(|(_, l)| !parent_joint.contains_key(l.name.as_str()))
         .collect();
-    for extra in roots.iter().skip(1) {
+    for &(i, extra) in roots.iter().skip(1) {
         out.push(critical(
             "RS006",
             format!(
@@ -144,6 +157,7 @@ fn tree_shape(robot: &Robot, out: &mut Vec<Finding>) {
                 extra.name
             ),
             extra.span,
+            Element::Link(i),
         ));
     }
 }

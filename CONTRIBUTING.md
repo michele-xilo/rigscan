@@ -77,6 +77,9 @@ cargo bench --workspace --no-run
 3. Implement the rule in `crates/rigscan-core/src/lint.rs` so that it reads only
    `Robot`, never format-specific data. One rule then serves every format.
 4. Add the rule to the list in the README.
+5. Add its probe to `scripts/compare/probes/` (named `RSnnn_<what>.urdf`) and a title to `TITLES` in
+   `scripts/compare/compare.py`, then rerun the script (see the README comparison section).
+   CI fails when a rule has no probe or the README table is stale.
 
 ### Performance
 

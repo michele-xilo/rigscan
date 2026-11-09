@@ -107,6 +107,19 @@ fn parse_mjcf_chain(c: &mut Criterion) {
     g.finish();
 }
 
+fn mjcf_to_robot(c: &mut Criterion) {
+    let mut g = c.benchmark_group("mjcf_to_robot");
+    g.sample_size(10);
+    for n in SIZES {
+        let mjcf = parse_mjcf(&chain_mjcf(n), &NoFiles).unwrap();
+        g.throughput(Throughput::Elements(n as u64));
+        g.bench_with_input(BenchmarkId::from_parameter(n), &mjcf, |b, mjcf| {
+            b.iter(|| black_box(mjcf).to_robot().unwrap())
+        });
+    }
+    g.finish();
+}
+
 fn lint_all(c: &mut Criterion) {
     let mut g = c.benchmark_group("lint");
     g.sample_size(10);
@@ -188,6 +201,7 @@ criterion_group!(
     parse,
     parse_rich,
     parse_mjcf_chain,
+    mjcf_to_robot,
     lint_all,
     lint_rich,
     report_all,

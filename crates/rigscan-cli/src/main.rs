@@ -5,7 +5,7 @@ mod resolve;
 use clap::{Parser, Subcommand, ValueEnum};
 use output::Scanned;
 use rayon::prelude::*;
-use rigscan_core::{lint_with, parse_urdf, Format, Severity};
+use rigscan_core::{lint_with, parse_urdf, Format, ParseError, Severity};
 use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -204,6 +204,7 @@ fn scan_file(path: &Path) -> Result<Scanned, String> {
     let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let robot = match format {
         Format::Urdf => parse_urdf(&src),
+        Format::Mjcf => Err(ParseError("MJCF is not supported yet".into())),
     }
     .map_err(|e| format!("{}: {}", path.display(), e.0))?;
     let findings = lint_with(&robot, &resolve::FsResolver::for_file(path));

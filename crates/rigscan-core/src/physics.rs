@@ -1,7 +1,7 @@
 //! Physics rules: mass, inertia and joint limits (RS008 to RS013).
 
 use crate::lint::{critical, warning, Finding};
-use crate::model::{Element, Inertia, Joint, JointKind, Robot};
+use crate::model::{Element, Format, Inertia, Joint, JointKind, Robot};
 use std::collections::HashMap;
 
 // Measured on 69 real robots: every tensor flagged below is wrong by more than 1%, so these only
@@ -14,7 +14,7 @@ const TRIANGLE_TOLERANCE: f64 = 1e-6;
 pub fn physics(robot: &Robot, out: &mut Vec<Finding>) {
     links(robot, out);
     for (i, j) in robot.joints.iter().enumerate() {
-        limits(i, j, out);
+        limits(robot.format, i, j, out);
     }
 }
 
@@ -124,20 +124,25 @@ fn principal_moments(t: &Inertia) -> [f64; 3] {
     [low, 3.0 * q - high - low, high]
 }
 
-fn limits(i: usize, j: &Joint, out: &mut Vec<Finding>) {
+fn limits(format: Format, i: usize, j: &Joint, out: &mut Vec<Finding>) {
     let kind = match j.kind {
         JointKind::Revolute => "revolute",
         JointKind::Prismatic => "prismatic",
         _ => return,
     };
     let element = Element::Joint(i);
+    // Requiring a limit with effort and velocity is a URDF rule: MJCF joints may be unlimited
+    // and carry neither value.
+    let urdf = format == Format::Urdf;
     let Some(limit) = &j.limit else {
-        out.push(critical(
-            "RS013",
-            format!("{kind} joint `{}` has no limit", j.name),
-            j.span,
-            element,
-        ));
+        if urdf {
+            out.push(critical(
+                "RS013",
+                format!("{kind} joint `{}` has no limit", j.name),
+                j.span,
+                element,
+            ));
+        }
         return;
     };
     let missing: Vec<&str> = [("effort", limit.effort), ("velocity", limit.velocity)]
@@ -145,7 +150,7 @@ fn limits(i: usize, j: &Joint, out: &mut Vec<Finding>) {
         .filter(|(_, v)| v.is_none())
         .map(|(n, _)| n)
         .collect();
-    if !missing.is_empty() {
+    if urdf && !missing.is_empty() {
         let names: Vec<String> = missing.iter().map(|n| format!("`{n}`")).collect();
         out.push(critical(
             "RS013",

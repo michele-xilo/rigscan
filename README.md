@@ -41,8 +41,9 @@ WebAssembly, and from Python.
     directory called `name`; a package it cannot locate is not reported
   - `RS015` a `<mimic>` of a joint that does not exist, or of the joint itself
 - `parse_mjcf` reads MJCF into an element tree with line and column spans, splicing in `include`d files
-  through a caller-supplied loader and applying `default` classes. It is a library function only: there
-  are no MJCF rules and the CLI does not scan MJCF yet.
+  through a caller-supplied loader and applying `default` classes. `to_robot()` maps it onto the same model
+  URDF uses, so the structural and physics rules run on it, and lists what the model cannot hold. It is a
+  library function only: there are no MJCF-specific rules and the CLI does not scan MJCF yet.
 - `rigscan-core` compiles for `wasm32-unknown-unknown`.
 
 ```bash

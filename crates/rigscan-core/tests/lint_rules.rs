@@ -170,3 +170,64 @@ fn rs007_span_points_at_the_robot_element_not_the_file_start() {
 fn rs007_does_not_fire_for_a_robot_with_a_link() {
     assert!(only(&run("<link name=\"a\"/>"), "RS007").is_empty());
 }
+
+fn two_joints_same_parent(format: rigscan_core::Format) -> Vec<&'static str> {
+    use rigscan_core::{Joint, JointKind, Link, Origin, Robot, Span};
+    let span = Span { line: 1, col: 1 };
+    let link = |n: &str| Link {
+        name: n.into(),
+        inertial: None,
+        meshes: Vec::new(),
+        span,
+    };
+    let joint = |n: &str, p: &str| Joint {
+        name: n.into(),
+        parent: p.into(),
+        child: "c".into(),
+        kind: JointKind::Fixed,
+        origin: Origin::default(),
+        limit: None,
+        mimic: None,
+        span,
+    };
+    let mut r = Robot::new(format);
+    r.links = vec![link("p"), link("q"), link("c")];
+    r.joints = vec![joint("j1", "p"), joint("j2", "p")];
+    lint(&r).iter().map(|f| f.rule).collect()
+}
+
+#[test]
+fn rs004_flags_repeated_joints_between_the_same_links_in_urdf() {
+    assert!(two_joints_same_parent(rigscan_core::Format::Urdf).contains(&"RS004"));
+}
+
+#[test]
+fn rs004_allows_repeated_joints_between_the_same_links_in_mjcf() {
+    assert!(!two_joints_same_parent(rigscan_core::Format::Mjcf).contains(&"RS004"));
+}
+
+#[test]
+fn rs004_flags_a_body_reached_from_two_parents_in_mjcf() {
+    use rigscan_core::{Format, Joint, JointKind, Link, Origin, Robot, Span};
+    let span = Span { line: 1, col: 1 };
+    let link = |n: &str| Link {
+        name: n.into(),
+        inertial: None,
+        meshes: Vec::new(),
+        span,
+    };
+    let joint = |n: &str, p: &str| Joint {
+        name: n.into(),
+        parent: p.into(),
+        child: "c".into(),
+        kind: JointKind::Fixed,
+        origin: Origin::default(),
+        limit: None,
+        mimic: None,
+        span,
+    };
+    let mut r = Robot::new(Format::Mjcf);
+    r.links = vec![link("p"), link("q"), link("c")];
+    r.joints = vec![joint("j1", "p"), joint("j2", "q")];
+    assert!(lint(&r).iter().any(|f| f.rule == "RS004"));
+}

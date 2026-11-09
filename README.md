@@ -54,6 +54,10 @@ cargo build -p rigscan-core --target wasm32-unknown-unknown
 
 Bug fixes start with a failing test.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and the [style guide](STYLE_GUIDE.md).
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).

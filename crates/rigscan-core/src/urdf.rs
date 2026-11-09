@@ -138,6 +138,10 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
         }
         if opens {
             stack.push(child_ctx(parent, name));
+        } else if name == "joint" && parent == Some(Ctx::Robot) {
+            // No End event follows a self-closing joint, so it is kept here
+            // for lint to report instead of being replaced by the next one.
+            robot.joints.extend(joint.take());
         }
     }
     if !seen_robot {

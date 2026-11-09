@@ -65,8 +65,8 @@ UsdPhysics only), SDF, mesh conversion, simulation.
 - CLI: `rigscan scan <files>` (#2): `path:line:col: severity RULE: message`, exit 0/1/2. No report layer yet (#3).
 - Not done: inertials/limits/mesh parsing, physics rules, MJCF, conversion,
   bindings, playground.
-- Known gap: a self-closing `<joint .../>` leaves a half-built joint that the
-  next joint silently replaces. Should become a lint finding.
+- A self-closing `<joint .../>` or a joint missing `<parent>`/`<child>` is kept
+  with empty endpoints and reported by RS001 ("has no parent link").
 
 ## Model shape (grows with parsers; do not add fields speculatively)
 
@@ -97,7 +97,7 @@ because `.usdc` has no line numbers.
 
 | ID | Severity | Meaning |
 |---|---|---|
-| RS001 | critical | joint references an undefined parent/child link |
+| RS001 | critical | joint references an undefined parent/child link, or has none |
 | RS002 | critical | duplicate link name |
 | RS003 | critical | duplicate joint name |
 | RS004 | critical | link has more than one parent joint (flagged on the extra joint) |

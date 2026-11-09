@@ -111,3 +111,35 @@ fn branching_tree_has_no_findings() {
     );
     assert!(run(&body).is_empty());
 }
+
+#[test]
+fn self_closing_joint_is_reported_with_its_span() {
+    let f = run("<link name=\"a\"/>\n<joint name=\"j\" type=\"fixed\"/>");
+
+    assert_eq!(f.len(), 2, "{f:?}");
+    assert!(f
+        .iter()
+        .all(|x| x.rule == "RS001" && x.span == Span { line: 3, col: 1 }));
+    assert!(f[0].message.contains("no parent link"), "{}", f[0].message);
+    assert!(f[1].message.contains("no child link"), "{}", f[1].message);
+}
+
+#[test]
+fn self_closing_joint_does_not_swallow_the_next_joint() {
+    let f = run("<link name=\"a\"/><link name=\"b\"/>\n<joint name=\"bad\"/>\n<joint name=\"j\" type=\"fixed\"><parent link=\"a\"/><child link=\"ghost\"/></joint>");
+
+    assert!(
+        f.iter()
+            .any(|x| x.message.contains("`j`") && x.message.contains("ghost")),
+        "{f:?}"
+    );
+    assert!(f.iter().any(|x| x.message.contains("`bad`")), "{f:?}");
+}
+
+#[test]
+fn joint_without_parent_element_is_reported() {
+    let f = run("<link name=\"a\"/><link name=\"b\"/>\n<joint name=\"j\" type=\"fixed\"><child link=\"b\"/></joint>");
+
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert!(f[0].message.contains("no parent link"), "{}", f[0].message);
+}

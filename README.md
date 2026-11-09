@@ -1,5 +1,6 @@
 # Rigscan
 
+[![build](https://github.com/michele-xilo/rigscan/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/michele-xilo/rigscan/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/michele-xilo/rigscan/branch/main/graph/badge.svg)](https://codecov.io/gh/michele-xilo/rigscan)
 
 A health check for robot descriptions.

@@ -1,0 +1,8 @@
+<robot name="healthy">
+  <link name="base"/>
+  <link name="arm"/>
+  <joint name="j1" type="fixed">
+    <parent link="base"/>
+    <child link="arm"/>
+  </joint>
+</robot>

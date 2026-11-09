@@ -9,9 +9,9 @@ Rigscan scans robot description files, reports what is wrong with them, and
 The core is written in Rust and is designed to run as a CLI, in the browser via
 WebAssembly, and from Python.
 
-> **Status: pre-alpha.** Only the URDF parser and one lint rule exist. There is
-> no CLI, no MJCF or USD support, and nothing is published yet. The API will
-> change.
+> **Status: pre-alpha.** URDF parsing, six structural lint rules and a `scan`
+> command exist. There is no MJCF or USD support, no conversion, and nothing is
+> published yet. The API will change.
 
 ## What works today
 
@@ -24,6 +24,17 @@ WebAssembly, and from Python.
   - `RS005` a kinematic loop
   - `RS006` more than one root link
 - `rigscan-core` compiles for `wasm32-unknown-unknown`.
+
+```bash
+cargo run -p rigscan-cli -- scan robot.urdf
+# robot.urdf:5:5: critical RS001: joint `j1` child link `ghost` is not defined
+```
+
+`rigscan scan` takes one or more files and exits 0 when clean, 1 when there
+are critical findings, and 2 when a file cannot be scanned. File type is
+detected from the extension (`.urdf` for now).
+
+As a library:
 
 ```rust
 use rigscan_core::{lint, parse_urdf};

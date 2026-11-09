@@ -61,6 +61,13 @@ fn transmission_does_not_cause_findings() {
 }
 
 #[test]
+fn document_without_robot_element_is_an_error() {
+    for src in ["", "   \n", "<html><body/></html>"] {
+        assert!(parse_urdf(src).is_err(), "accepted {src:?}");
+    }
+}
+
+#[test]
 fn span_columns_count_characters_not_bytes() {
     let src = "<robot name=\"r\">\n<link name=\"é\"/><link name=\"b\"/>\n</robot>";
     let robot = parse_urdf(src).unwrap();

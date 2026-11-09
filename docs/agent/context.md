@@ -62,7 +62,8 @@ UsdPhysics only), SDF, mesh conversion, simulation.
   rules RS001-RS006 (structural), README, Apache-2.0 LICENSE.
 - Builds for `wasm32-unknown-unknown` (compile check only, not run in a
   browser).
-- Not done: CLI, inertials/limits/mesh parsing, physics rules, MJCF, conversion,
+- CLI: `rigscan scan <files>` (#2): `path:line:col: severity RULE: message`, exit 0/1/2. No report layer yet (#3).
+- Not done: inertials/limits/mesh parsing, physics rules, MJCF, conversion,
   bindings, playground.
 - Known gap: a self-closing `<joint .../>` leaves a half-built joint that the
   next joint silently replaces. Should become a lint finding.

@@ -1,0 +1,7 @@
+<robot name="broken">
+  <link name="base"/>
+  <joint name="j1" type="fixed">
+    <parent link="base"/>
+    <child link="ghost"/>
+  </joint>
+</robot>

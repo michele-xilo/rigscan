@@ -25,10 +25,15 @@ pub fn lint(robot: &Robot) -> Vec<Finding> {
     for j in &robot.joints {
         for (role, name) in [("parent", &j.parent), ("child", &j.child)] {
             if !link_names.contains(name.as_str()) {
+                let message = if name.is_empty() {
+                    format!("joint `{}` has no {role} link", j.name)
+                } else {
+                    format!("joint `{}` {role} link `{name}` is not defined", j.name)
+                };
                 findings.push(Finding {
                     rule: "RS001",
                     severity: Severity::Critical,
-                    message: format!("joint `{}` {role} link `{name}` is not defined", j.name),
+                    message,
                     span: j.span,
                 });
             }

@@ -1,0 +1,10 @@
+[project]
+name = "rigscan-compare"
+version = "0.0.0"
+description = "Runs popular URDF tools next to Rigscan on the same inputs"
+requires-python = "==3.12.*"
+dependencies = [
+    "mujoco==4.0.0",
+    "pin==4.1.0",
+    "yourdfpy==0.0.60",
+]

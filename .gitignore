@@ -2,3 +2,5 @@ target/
 
 # Downloaded by scripts/fetch-corpus.sh
 /corpus/
+
+/scripts/compare/.venv/

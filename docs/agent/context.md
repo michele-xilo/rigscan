@@ -58,7 +58,7 @@ UsdPhysics only), SDF, mesh conversion, simulation.
 
 ## Status (update when it changes)
 
-- Done: workspace, `rigscan-core` with a format-neutral `Robot` (#1), URDF parser (links, joints, spans, robot name),
+- Done: workspace, `rigscan-core` with a format-neutral `Robot` (#1), URDF parser (links, joints, spans, robot name, joint type/origin/limit/mimic, inertials, mesh refs; #5),
   rules RS001-RS006 (structural), README, Apache-2.0 LICENSE.
 - Builds for `wasm32-unknown-unknown` (compile check only, not run in a
   browser).
@@ -68,12 +68,22 @@ UsdPhysics only), SDF, mesh conversion, simulation.
 - Known gap: a self-closing `<joint .../>` leaves a half-built joint that the
   next joint silently replaces. Should become a lint finding.
 
-## Intended model shape (grows with parsers; do not add fields speculatively)
+## Model shape (grows with parsers; do not add fields speculatively)
 
-`Robot { format, name, links, joints }` today. Planned additions, each added
-by the ticket whose parser needs it: inertials, joint types and limits,
-origins and mesh references (#5); geoms and actuators (MJCF, #11); USD prim
-data (#15); loss annotations (#18).
+`Robot { format, name, links, joints }`.
+
+- `Link { name, inertial, meshes, span }`: `Inertial { mass: Option, inertia: Option<Inertia> }`,
+  `MeshRef { filename, span }` from `<visual>` and `<collision>` geometry (#5).
+- `Joint { name, parent, child, kind, origin, limit, mimic, span }`:
+  `JointKind` keeps an unknown or missing `type` as `Other(String)` so a rule
+  can report it; `Origin` defaults to zero; `Limit` and `Mimic` fields are
+  `Option` so a rule can tell missing from zero (#5).
+- Parse errors: an invalid number, a wrong-length vector, a missing required
+  attribute (`inertia` fields, `mesh filename`) is a `ParseError` prefixed with
+  `line:col:`. A scan stops at the first one. If users want all problems
+  reported at once, make these findings instead.
+- Not yet: geoms with primitives, actuators, axis, link origins (#11, viewer),
+  USD data (#15), loss annotations (#18).
 
 Known risk for #11: an MJCF body can have several joints to its parent, or
 none. The model has one parent/child edge per joint, so RS004 would flag

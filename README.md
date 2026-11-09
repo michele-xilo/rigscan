@@ -15,7 +15,10 @@ WebAssembly, and from Python.
 
 ## What works today
 
-- Parse URDF links and joints, keeping the line and column of each element.
+- Parse URDF links and joints, keeping the line and column of each element,
+  along with joint types, origins, limits and mimic, link inertials, and the
+  mesh files a link references. Invalid numbers are reported with their
+  line and column.
 - Six structural lint rules, all critical:
   - `RS001` a joint references a parent or child link that is not defined
   - `RS002` duplicate link names

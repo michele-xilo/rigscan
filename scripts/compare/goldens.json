@@ -1,0 +1,299 @@
+{
+  "probes": {
+    "RS001_undefined_child": {
+      "mujoco": {
+        "message": "XML Error: URDF joint parent or child missing",
+        "outcome": "reject"
+      },
+      "pinocchio": {
+        "message": "The file RS001_undefined_child.urdf does not contain a valid URDF model.",
+        "outcome": "reject"
+      },
+      "rigscan": [
+        "RS001"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "ok"
+      }
+    },
+    "RS002_duplicate_link": {
+      "mujoco": {
+        "message": "XML Error: repeated URDF name:",
+        "outcome": "reject"
+      },
+      "pinocchio": {
+        "message": "The file RS002_duplicate_link.urdf does not contain a valid URDF model.",
+        "outcome": "reject"
+      },
+      "rigscan": [
+        "RS002",
+        "RS006"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "ok"
+      }
+    },
+    "RS003_duplicate_joint": {
+      "mujoco": {
+        "message": "",
+        "outcome": "ok"
+      },
+      "pinocchio": {
+        "message": "The file RS003_duplicate_joint.urdf does not contain a valid URDF model.",
+        "outcome": "reject"
+      },
+      "rigscan": [
+        "RS003"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "ok"
+      }
+    },
+    "RS004_two_parents": {
+      "mujoco": {
+        "message": "XML Error: URDF body has multiple parents:",
+        "outcome": "reject"
+      },
+      "pinocchio": {
+        "message": "The file RS004_two_parents.urdf does not contain a valid URDF model.",
+        "outcome": "reject"
+      },
+      "rigscan": [
+        "RS004",
+        "RS006"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "ok"
+      }
+    },
+    "RS005_loop": {
+      "mujoco": {
+        "message": "XML Error: URDF body not found",
+        "outcome": "reject"
+      },
+      "pinocchio": {
+        "message": "The file RS005_loop.urdf does not contain a valid URDF model.",
+        "outcome": "reject"
+      },
+      "rigscan": [
+        "RS005"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "ok"
+      }
+    },
+    "RS006_two_roots": {
+      "mujoco": {
+        "message": "",
+        "outcome": "ok"
+      },
+      "pinocchio": {
+        "message": "The file RS006_two_roots.urdf does not contain a valid URDF model.",
+        "outcome": "reject"
+      },
+      "rigscan": [
+        "RS006"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "ok"
+      }
+    },
+    "RS007_no_links": {
+      "mujoco": {
+        "message": "",
+        "outcome": "ok"
+      },
+      "pinocchio": {
+        "message": "The file RS007_no_links.urdf does not contain a valid URDF model.",
+        "outcome": "reject"
+      },
+      "rigscan": [
+        "RS007"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "ok"
+      }
+    },
+    "RS008_negative_mass": {
+      "mujoco": {
+        "message": "Error: mass and inertia of moving bodies must be larger than mjMINVAL",
+        "outcome": "reject"
+      },
+      "pinocchio": {
+        "message": "",
+        "outcome": "ok"
+      },
+      "rigscan": [
+        "RS008"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "ok"
+      }
+    },
+    "RS009_zero_mass_moving": {
+      "mujoco": {
+        "message": "Error: mass and inertia of moving bodies must be larger than mjMINVAL",
+        "outcome": "reject"
+      },
+      "pinocchio": {
+        "message": "",
+        "outcome": "ok"
+      },
+      "rigscan": [
+        "RS009"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "ok"
+      }
+    },
+    "RS010_negative_inertia": {
+      "mujoco": {
+        "message": "Error: error 'inertia must have positive eigenvalues' in fullinertia",
+        "outcome": "reject"
+      },
+      "pinocchio": {
+        "message": "",
+        "outcome": "ok"
+      },
+      "rigscan": [
+        "RS010"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "ok"
+      }
+    },
+    "RS011_triangle": {
+      "mujoco": {
+        "message": "Error: inertia must satisfy A + B >= C; use 'balanceinertia' to fix",
+        "outcome": "reject"
+      },
+      "pinocchio": {
+        "message": "",
+        "outcome": "ok"
+      },
+      "rigscan": [
+        "RS011"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "ok"
+      }
+    },
+    "RS012_lower_gt_upper": {
+      "mujoco": {
+        "message": "",
+        "outcome": "ok"
+      },
+      "pinocchio": {
+        "message": "",
+        "outcome": "ok"
+      },
+      "rigscan": [
+        "RS012"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "ok"
+      }
+    },
+    "RS013_limit_no_effort": {
+      "mujoco": {
+        "message": "",
+        "outcome": "ok"
+      },
+      "pinocchio": {
+        "message": "The file RS013_limit_no_effort.urdf does not contain a valid URDF model.",
+        "outcome": "reject"
+      },
+      "rigscan": [
+        "RS013"
+      ],
+      "yourdfpy": {
+        "message": "URDFIncompleteError: Tag <limit> of joint is missing attribute 'effort'.; URDFIncompleteError: Tag <limit> of joint is m",
+        "outcome": "reject"
+      }
+    },
+    "RS013_revolute_no_limit": {
+      "mujoco": {
+        "message": "",
+        "outcome": "ok"
+      },
+      "pinocchio": {
+        "message": "The file RS013_revolute_no_limit.urdf does not contain a valid URDF model.",
+        "outcome": "reject"
+      },
+      "rigscan": [
+        "RS013"
+      ],
+      "yourdfpy": {
+        "message": "URDFIncompleteError: The <limit> of a (prismatic, revolute) joint is missing.",
+        "outcome": "reject"
+      }
+    },
+    "healthy": {
+      "mujoco": {
+        "message": "",
+        "outcome": "ok"
+      },
+      "pinocchio": {
+        "message": "",
+        "outcome": "ok"
+      },
+      "rigscan": [],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "ok"
+      }
+    },
+    "parse_invalid_number": {
+      "mujoco": {
+        "message": "XML Error: bad format in attribute 'value'",
+        "outcome": "reject"
+      },
+      "pinocchio": {
+        "message": "Error:   Inertial: mass [abc] is not a float",
+        "outcome": "logged"
+      },
+      "rigscan": [
+        "error"
+      ],
+      "yourdfpy": {
+        "message": "could not convert string to float: 'abc'",
+        "outcome": "reject"
+      }
+    },
+    "parse_truncated": {
+      "mujoco": {
+        "message": "XML parse error 6:",
+        "outcome": "reject"
+      },
+      "pinocchio": {
+        "message": "The file parse_truncated.urdf does not contain a valid URDF model.",
+        "outcome": "reject"
+      },
+      "rigscan": [
+        "error"
+      ],
+      "yourdfpy": {
+        "message": "URDFIncompleteError: Tag <limit> of joint is missing attribute 'velocity'.",
+        "outcome": "reject"
+      }
+    }
+  },
+  "rigscan": "rigscan-cli 0.0.1",
+  "versions": {
+    "mujoco": "4.0.0",
+    "pinocchio": "4.1.0",
+    "yourdfpy": "0.0.60"
+  }
+}

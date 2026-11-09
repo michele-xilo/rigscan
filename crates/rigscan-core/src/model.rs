@@ -25,10 +25,11 @@ pub struct MeshRef {
 
 /// The `<inertial>` element. `mass` is optional so a rule can tell a missing
 /// mass from a zero one.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Inertial {
     pub mass: Option<f64>,
     pub inertia: Option<Inertia>,
+    pub span: Span,
 }
 
 /// Upper triangle of the symmetric inertia tensor.

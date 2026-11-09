@@ -67,7 +67,11 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
             }
             (Some(Ctx::Link), "inertial") => {
                 if let Some(l) = robot.links.last_mut() {
-                    l.inertial = Some(Inertial::default());
+                    l.inertial = Some(Inertial {
+                        mass: None,
+                        inertia: None,
+                        span: spans.at(start),
+                    });
                 }
             }
             (Some(Ctx::Inertial), "mass") => {

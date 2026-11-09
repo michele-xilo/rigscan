@@ -39,6 +39,7 @@ const WITH_TRANSMISSION: &str = r#"<robot name="demo">
   <joint name="j1" type="revolute">
     <parent link="base"/>
     <child link="arm"/>
+    <limit lower="0" upper="1" effort="1" velocity="1"/>
   </joint>
   <transmission name="t1">
     <joint name="j1"><hardwareInterface>EffortJointInterface</hardwareInterface></joint>

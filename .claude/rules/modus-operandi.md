@@ -79,7 +79,8 @@ rather than claim it works.
 ## README
 
 Keep `README.md` (and `docs/` where they describe the changed behaviour) up to date in the same change when
-you add a command, option, output format or rule.
+you add a command, option, output format or rule. A new rule also needs its probe in `scripts/compare/probes/`
+and a rerun of `scripts/compare/compare.py` (`--bench` when the core changes speed).
 
 ## Git
 

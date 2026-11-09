@@ -234,3 +234,40 @@ fn absurdly_deep_nesting_is_an_error_not_a_stack_overflow() {
 fn nesting_just_under_the_limit_still_parses() {
     assert!(parse_mjcf(&nested_bodies(250), &none()).is_ok());
 }
+
+#[test]
+fn include_without_a_file_attribute_is_an_error_with_its_position() {
+    let e = parse_mjcf("<mujoco>\n  <include/>\n</mujoco>", &none()).unwrap_err();
+    assert!(e.0.starts_with("2:3:"), "{}", e.0);
+}
+
+#[test]
+fn included_file_without_a_mujoco_root_is_an_error_naming_the_file() {
+    let loader = with(&[("bad.xml", "<robot/>")]);
+    let e = parse_mjcf("<mujoco><include file=\"bad.xml\"/></mujoco>", &loader).unwrap_err();
+    assert!(e.0.starts_with("bad.xml:"), "{}", e.0);
+}
+
+#[test]
+fn malformed_included_file_is_an_error_naming_the_file() {
+    let loader = with(&[("bad.xml", "<mujoco><body></mujoco>")]);
+    let e = parse_mjcf("<mujoco><include file=\"bad.xml\"/></mujoco>", &loader).unwrap_err();
+    assert!(e.0.starts_with("bad.xml:"), "{}", e.0);
+}
+
+#[test]
+fn two_root_elements_are_an_error() {
+    assert!(parse_mjcf("<mujoco/><mujoco/>", &none()).is_err());
+}
+
+#[test]
+fn unclosed_element_is_an_error() {
+    assert!(parse_mjcf("<mujoco><worldbody>", &none()).is_err());
+}
+
+#[test]
+fn undefined_childclass_is_recorded() {
+    let m = parse("<mujoco><worldbody><body childclass=\"nope\"/></worldbody></mujoco>");
+    assert_eq!(m.unknown_classes.len(), 1);
+    assert_eq!(m.unknown_classes[0].name, "nope");
+}

@@ -48,6 +48,8 @@ TITLES = {
     "RS011": "Triangle inequality of moments",
     "RS012": "Joint lower limit above upper",
     "RS013": "Joint limit missing or incomplete",
+    "RS014": "Mesh file not found",
+    "RS015": "Mimic of an undefined joint",
     "parse": "Malformed input (bad number, truncated XML)",
 }
 

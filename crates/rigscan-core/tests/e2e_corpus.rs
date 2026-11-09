@@ -12,8 +12,9 @@ const REPS: usize = 5;
 const CASES_PER_MODE: usize = 25;
 /// Real problems in upstream files: file, rule, number of findings. The test fails if one stops
 /// being reported or a new one appears.
-const KNOWN_FINDINGS: [(&str, &str, usize); 19] = [
+const KNOWN_FINDINGS: [(&str, &str, usize); 20] = [
     ("alex_description/urdf/alex_psyonic_hands.urdf", "RS011", 4),
+    ("alex_description/urdf/alex_psyonic_hands.urdf", "RS015", 8),
     (
         "allegro_hand_description/urdf/allegro_left_hand.urdf",
         "RS011",

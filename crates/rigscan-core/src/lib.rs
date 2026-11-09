@@ -1,12 +1,14 @@
 //! Rigscan core: parse robot descriptions with source spans and lint them.
 
+mod files;
 mod lint;
 mod model;
 mod physics;
 mod report;
 mod urdf;
 
-pub use lint::{lint, Finding, Severity};
+pub use files::{Resolution, Resolver};
+pub use lint::{lint, lint_with, Finding, Severity};
 pub use model::{
     Element, Format, Inertia, Inertial, Joint, JointKind, Limit, Link, MeshRef, Mimic, Origin,
     ParseError, Robot, Span,

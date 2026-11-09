@@ -240,6 +240,40 @@
         "outcome": "reject"
       }
     },
+    "RS014_missing_mesh": {
+      "mujoco": {
+        "message": "",
+        "outcome": "ok"
+      },
+      "pinocchio": {
+        "message": "",
+        "outcome": "ok"
+      },
+      "rigscan": [
+        "RS014"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "ok"
+      }
+    },
+    "RS015_mimic_undefined": {
+      "mujoco": {
+        "message": "WARNING: <mimic> on joint 'j' ignored; mimic requires revolute, continuous, or prismatic joints",
+        "outcome": "logged"
+      },
+      "pinocchio": {
+        "message": "",
+        "outcome": "ok"
+      },
+      "rigscan": [
+        "RS015"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "ok"
+      }
+    },
     "healthy": {
       "mujoco": {
         "message": "",

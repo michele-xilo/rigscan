@@ -1,5 +1,6 @@
 //! Lint rules. Each rule reads a [`Robot`] and reports findings with source spans.
 
+use crate::files::Resolver;
 use crate::model::{Element, Joint, Link, Robot, Span};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,8 +18,13 @@ pub struct Finding {
     pub element: Element,
 }
 
-/// Run all lint rules over a parsed robot.
+/// Run all lint rules over a parsed robot. Mesh files are not looked up: see [`lint_with`].
 pub fn lint(robot: &Robot) -> Vec<Finding> {
+    lint_with(robot, &crate::files::Unresolved)
+}
+
+/// Like [`lint`], and also checks that the files the robot references exist, asking `resolver`.
+pub fn lint_with(robot: &Robot, resolver: &dyn Resolver) -> Vec<Finding> {
     let mut findings = Vec::new();
     // RS001: joint references a link that is not defined.
     let link_names: std::collections::HashSet<&str> =
@@ -52,6 +58,7 @@ pub fn lint(robot: &Robot) -> Vec<Finding> {
     }
     duplicate_names(robot, &mut findings);
     crate::physics::physics(robot, &mut findings);
+    crate::files::files(robot, resolver, &mut findings);
     tree_shape(robot, &mut findings);
     findings
 }

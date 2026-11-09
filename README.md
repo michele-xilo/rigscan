@@ -36,6 +36,10 @@ WebAssembly, and from Python.
   - `RS012` joint `lower` limit above `upper`
   - `RS013` revolute or prismatic joint without a limit, or a limit missing
     `effort` or `velocity`
+  - `RS014` a mesh file that does not exist. The CLI looks relative paths up
+    from the URDF's directory, and `package://name/...` in the nearest parent
+    directory called `name`; a package it cannot locate is not reported
+  - `RS015` a `<mimic>` of a joint that does not exist, or of the joint itself
 - `rigscan-core` compiles for `wasm32-unknown-unknown`.
 
 ```bash
@@ -109,6 +113,8 @@ a tool flags that Rigscan does not are the target for new rules.
 | `RS011` Triangle inequality of moments | yes | yes | no | no |
 | `RS012` Joint lower limit above upper | yes | no | no | no |
 | `RS013` Joint limit missing or incomplete | yes | no | yes | yes |
+| `RS014` Mesh file not found | yes | no | no | no |
+| `RS015` Mimic of an undefined joint | yes | yes | no | no |
 | Malformed input (bad number, truncated XML) | yes | yes | yes | yes |
 <!-- compare:coverage:end -->
 

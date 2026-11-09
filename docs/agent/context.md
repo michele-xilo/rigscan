@@ -59,7 +59,7 @@ UsdPhysics only), SDF, mesh conversion, simulation.
 ## Status (update when it changes)
 
 - Done: workspace, `rigscan-core` with a format-neutral `Robot` (#1), URDF parser (links, joints, spans, robot name, joint type/origin/limit/mimic, inertials, mesh refs; #5),
-  rules RS001-RS013 (structure, mass and inertia, joint limits), README, Apache-2.0 LICENSE.
+  rules RS001-RS015 (structure, mass and inertia, joint limits, mesh files, mimic joints), README, Apache-2.0 LICENSE.
 - Builds for `wasm32-unknown-unknown` (compile check only, not run in a
   browser).
 - CLI: `rigscan scan <files>` (#2): `path:line:col: severity RULE: message`, exit 0/1/2. No report layer yet (#3).
@@ -115,9 +115,14 @@ because `.usdc` has no line numbers.
 | RS011 | warning | principal moments break A + B >= C (a flat plate, A + B == C, is valid) |
 | RS012 | critical | revolute/prismatic `lower` above `upper` |
 | RS013 | critical | revolute/prismatic joint without `<limit>`, or a limit without `effort` or `velocity` |
+| RS014 | critical | mesh file not found (flagged on the `<mesh>` element); only when the caller passes a `Resolver` to `lint_with`, and never when it answers `Unknown` |
+| RS015 | critical | `<mimic>` of an undefined joint or of the joint itself (flagged on the `<mimic>` element) |
 
-Planned next: mass <= 0, inertia triangle inequality, inverted joint limits,
-unresolved mesh paths, mimic joints with bad references, units/scale sanity.
+`lint` never touches files; `lint_with` asks a `Resolver` whether a reference exists. The CLI resolver treats
+`package://name/...` as the nearest ancestor directory called `name`. The corpus holds URDFs only, so a
+CLI scan of it reports RS014 for every mesh; the core corpus test uses `lint` and is unaffected.
+
+Planned next: units/scale sanity.
 
 ## End-to-end corpus
 

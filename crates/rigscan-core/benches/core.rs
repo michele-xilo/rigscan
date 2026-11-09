@@ -83,6 +83,23 @@ fn lint_all(c: &mut Criterion) {
     g.finish();
 }
 
+fn lint_rich(c: &mut Criterion) {
+    let mut g = c.benchmark_group("lint_rich");
+    g.sample_size(10);
+    for n in SIZES {
+        // A non-zero ixy sends every tensor through the eigenvalue solve, as real inertias do.
+        let src = rich_urdf(n).replace("ixy=\"0\"", "ixy=\"0.01\"");
+        let robot = parse_urdf(&src).unwrap();
+        g.throughput(Throughput::Elements(
+            (robot.links.len() + robot.joints.len()) as u64,
+        ));
+        g.bench_with_input(BenchmarkId::from_parameter(n), &robot, |b, robot| {
+            b.iter(|| lint(black_box(robot)))
+        });
+    }
+    g.finish();
+}
+
 fn report_all(c: &mut Criterion) {
     let mut g = c.benchmark_group("report");
     g.sample_size(10);
@@ -99,5 +116,5 @@ fn report_all(c: &mut Criterion) {
     g.finish();
 }
 
-criterion_group!(benches, parse, parse_rich, lint_all, report_all);
+criterion_group!(benches, parse, parse_rich, lint_all, lint_rich, report_all);
 criterion_main!(benches);

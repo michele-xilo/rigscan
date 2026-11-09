@@ -51,17 +51,35 @@ pub fn lint(robot: &Robot) -> Vec<Finding> {
         ));
     }
     duplicate_names(robot, &mut findings);
+    crate::physics::physics(robot, &mut findings);
     tree_shape(robot, &mut findings);
     findings
 }
 
-fn critical(rule: &'static str, message: String, span: Span, element: Element) -> Finding {
+pub(crate) fn critical(
+    rule: &'static str,
+    message: String,
+    span: Span,
+    element: Element,
+) -> Finding {
     Finding {
         rule,
         severity: Severity::Critical,
         message,
         span,
         element,
+    }
+}
+
+pub(crate) fn warning(
+    rule: &'static str,
+    message: String,
+    span: Span,
+    element: Element,
+) -> Finding {
+    Finding {
+        severity: Severity::Warning,
+        ..critical(rule, message, span, element)
     }
 }
 

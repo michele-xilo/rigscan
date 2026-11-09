@@ -2,6 +2,7 @@
 
 mod lint;
 mod model;
+mod physics;
 mod report;
 mod urdf;
 

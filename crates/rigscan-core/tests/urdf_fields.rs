@@ -188,6 +188,7 @@ fn inertial_reads_mass_and_inertia() {
                 iyz: 0.3,
                 izz: 3.0,
             }),
+            span: Span { line: 1, col: 32 },
         })
     );
 }

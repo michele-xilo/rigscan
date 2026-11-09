@@ -59,7 +59,7 @@ UsdPhysics only), SDF, mesh conversion, simulation.
 ## Status (update when it changes)
 
 - Done: workspace, `rigscan-core` with a format-neutral `Robot` (#1), URDF parser (links, joints, spans, robot name, joint type/origin/limit/mimic, inertials, mesh refs; #5),
-  rules RS001-RS007 (structural), README, Apache-2.0 LICENSE.
+  rules RS001-RS013 (structure, mass and inertia, joint limits), README, Apache-2.0 LICENSE.
 - Builds for `wasm32-unknown-unknown` (compile check only, not run in a
   browser).
 - CLI: `rigscan scan <files>` (#2): `path:line:col: severity RULE: message`, exit 0/1/2. No report layer yet (#3).
@@ -109,6 +109,12 @@ because `.usdc` has no line numbers.
 | RS005 | critical | kinematic loop |
 | RS006 | critical | more than one root link (flagged on each extra root) |
 | RS007 | critical | robot has no links (flagged on the robot element) |
+| RS008 | critical | negative mass (flagged on the `<inertial>` element) |
+| RS009 | warning | zero mass on a link whose parent joint moves; massless frames on fixed joints and roots are fine |
+| RS010 | critical | negative principal moment, from the full tensor; tensors with every moment under 1e-12 are ignored |
+| RS011 | warning | principal moments break A + B >= C (a flat plate, A + B == C, is valid) |
+| RS012 | critical | revolute/prismatic `lower` above `upper` |
+| RS013 | critical | revolute/prismatic joint without `<limit>`, or a limit without `effort` or `velocity` |
 
 Planned next: mass <= 0, inertia triangle inequality, inverted joint limits,
 unresolved mesh paths, mimic joints with bad references, units/scale sanity.
@@ -119,6 +125,6 @@ unresolved mesh paths, mimic joints with bad references, units/scale sanity.
   gitignored `corpus/`. The file list is `scripts/corpus-urdf.txt`.
 - `crates/rigscan-core/tests/e2e_corpus.rs`: lint every file (must be clean), perf report, then 200 seeded
   corruptions (8 modes x 25), each must be detected. Modes: RS001-RS006, invalid number, truncated XML.
-- Known real finding: `ur_description/urdf/ur3.urdf` is an empty upstream robot, reported as RS007; the test
-  fails if it stops being reported.
+- Real findings in upstream files (empty robot, invalid inertias, zero mass on moving links) are listed with
+  counts in `KNOWN_FINDINGS`; the test fails if one stops being reported or a new one appears.
 - Only URDF exists; MJCF and USD corpora wait for their parsers.

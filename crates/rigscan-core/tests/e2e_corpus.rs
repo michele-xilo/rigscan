@@ -10,8 +10,41 @@ use std::time::{Duration, Instant};
 
 const REPS: usize = 5;
 const CASES_PER_MODE: usize = 25;
-/// Real problems in upstream files; the test fails if one stops being reported.
-const KNOWN_FINDINGS: [(&str, &str); 1] = [("ur_description/urdf/ur3.urdf", "RS007")];
+/// Real problems in upstream files: file, rule, number of findings. The test fails if one stops
+/// being reported or a new one appears.
+const KNOWN_FINDINGS: [(&str, &str, usize); 19] = [
+    ("alex_description/urdf/alex_psyonic_hands.urdf", "RS011", 4),
+    (
+        "allegro_hand_description/urdf/allegro_left_hand.urdf",
+        "RS011",
+        4,
+    ),
+    (
+        "allegro_hand_description/urdf/allegro_right_hand.urdf",
+        "RS011",
+        4,
+    ),
+    (
+        "anymal_b_simple_description/robots/anymal-kinova.urdf",
+        "RS011",
+        1,
+    ),
+    ("anymal_b_simple_description/robots/anymal.urdf", "RS011", 1),
+    ("anymal_c_simple_description/urdf/anymal.urdf", "RS011", 5),
+    ("b1_description/urdf/b1-z1.urdf", "RS011", 1),
+    ("b1_description/urdf/b1.urdf", "RS011", 1),
+    ("go1_description/urdf/go1.urdf", "RS011", 1),
+    ("hyq_description/robots/hyq_no_sensors.urdf", "RS011", 5),
+    ("pr2_description/urdf/pr2.urdf", "RS011", 2),
+    ("romeo_description/urdf/romeo.urdf", "RS009", 24),
+    ("romeo_description/urdf/romeo_laas_small.urdf", "RS010", 3),
+    ("romeo_description/urdf/romeo_laas_small.urdf", "RS011", 2),
+    ("romeo_description/urdf/romeo_small.urdf", "RS011", 2),
+    ("tiago_description/robots/tiago.urdf", "RS010", 2),
+    ("tiago_description/robots/tiago_dual.urdf", "RS010", 2),
+    ("tiago_description/robots/tiago_no_hand.urdf", "RS010", 2),
+    ("ur_description/urdf/ur3.urdf", "RS007", 1),
+];
 const DEFAULT_SEED: u64 = 0x5249_4753_4341_4E31;
 
 struct Corpus {
@@ -125,15 +158,22 @@ fn corpus_lints_clean_and_reports_performance() {
     let mut elements = 0usize;
     for (path, src) in &corpus.files {
         let robot = parse_urdf(src).unwrap_or_else(|e| panic!("{}: {}", short(path), e.0));
-        let rules: Vec<&str> = lint(&robot).iter().map(|f| f.rule).collect();
+        let mut found: Vec<(&str, usize)> = Vec::new();
+        for f in lint(&robot) {
+            match found.iter_mut().find(|(r, _)| *r == f.rule) {
+                Some((_, n)) => *n += 1,
+                None => found.push((f.rule, 1)),
+            }
+        }
+        found.sort();
         let name = short(path);
-        let expected: Vec<&str> = KNOWN_FINDINGS
+        let expected: Vec<(&str, usize)> = KNOWN_FINDINGS
             .iter()
-            .filter(|(file, _)| *file == name)
-            .map(|(_, rule)| *rule)
+            .filter(|(file, _, _)| *file == name)
+            .map(|(_, rule, n)| (*rule, *n))
             .collect();
         assert_eq!(
-            rules, expected,
+            found, expected,
             "{name}: findings differ from the known ones"
         );
         let parse = best_of(|| parse_urdf(src));

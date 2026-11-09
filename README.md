@@ -10,7 +10,7 @@ Rigscan scans robot description files, reports what is wrong with them, and
 The core is written in Rust and is designed to run as a CLI, in the browser via
 WebAssembly, and from Python.
 
-> **Status: pre-alpha.** URDF parsing, seven structural lint rules and a `scan`
+> **Status: pre-alpha.** URDF parsing, thirteen lint rules and a `scan`
 > command exist. There is no MJCF or USD support, no conversion, and nothing is
 > published yet. The API will change.
 
@@ -20,7 +20,7 @@ WebAssembly, and from Python.
   along with joint types, origins, limits and mimic, link inertials, and the
   mesh files a link references. Invalid numbers are reported with their
   line and column.
-- Seven structural lint rules, all critical:
+- Lint rules (critical unless noted):
   - `RS001` a joint references a parent or child link that is not defined, or has none
   - `RS002` duplicate link names
   - `RS003` duplicate joint names
@@ -28,6 +28,14 @@ WebAssembly, and from Python.
   - `RS005` a kinematic loop
   - `RS006` more than one root link
   - `RS007` a robot with no links
+  - `RS008` negative link mass
+  - `RS009` zero mass on a link moved by a joint (warning; massless frames on
+    fixed joints are fine)
+  - `RS010` negative principal moment of inertia
+  - `RS011` principal moments break the triangle inequality (warning)
+  - `RS012` joint `lower` limit above `upper`
+  - `RS013` revolute or prismatic joint without a limit, or a limit missing
+    `effort` or `velocity`
 - `rigscan-core` compiles for `wasm32-unknown-unknown`.
 
 ```bash

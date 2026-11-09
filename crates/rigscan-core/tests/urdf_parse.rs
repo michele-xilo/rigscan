@@ -76,3 +76,12 @@ fn span_columns_count_characters_not_bytes() {
     assert_eq!(robot.links[0].span, Span { line: 2, col: 1 });
     assert_eq!(robot.links[1].span, Span { line: 2, col: 17 });
 }
+
+#[test]
+fn unclosed_element_at_end_of_input_is_a_parse_error() {
+    let err = parse_urdf("<robot name=\"t\"><link name=\"a\"/>")
+        .unwrap_err()
+        .0;
+
+    assert!(err.contains("unclosed"), "{err}");
+}

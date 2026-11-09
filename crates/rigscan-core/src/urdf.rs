@@ -144,6 +144,9 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
             robot.joints.extend(joint.take());
         }
     }
+    if !stack.is_empty() {
+        return Err(ParseError("unclosed element at end of input".into()));
+    }
     if !seen_robot {
         return Err(ParseError("no <robot> element found".into()));
     }

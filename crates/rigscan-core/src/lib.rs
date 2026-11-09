@@ -2,6 +2,7 @@
 
 mod files;
 mod lint;
+mod mjcf;
 mod model;
 mod physics;
 mod report;
@@ -9,6 +10,7 @@ mod urdf;
 
 pub use files::{Resolution, Resolver};
 pub use lint::{lint, lint_with, Finding, Severity};
+pub use mjcf::{parse_mjcf, IncludeLoader, Mjcf, MjcfNode, Reference};
 pub use model::{
     Element, Format, Inertia, Inertial, Joint, JointKind, Limit, Link, MeshRef, Mimic, Origin,
     ParseError, Robot, Span,

@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use rigscan_core::{lint, parse_urdf, report};
+use rigscan_core::{lint, parse_mjcf, parse_urdf, report, IncludeLoader};
 use std::hint::black_box;
 
 /// A chain of `n` links joined by `n - 1` fixed joints, one element per line.
@@ -39,6 +39,32 @@ fn rich_urdf(n: usize) -> String {
     s + "</robot>"
 }
 
+/// `n` bodies using default classes, one element per line, in chains of 50 as in a real MJCF.
+fn chain_mjcf(n: usize) -> String {
+    let mut s = String::from(
+        "<mujoco model=\"bench\">\n  <default>\n    <joint damping=\"1\" range=\"-1.5 1.5\"/>\n\
+    <default class=\"link\"><geom size=\"0.05\" density=\"1000\"/></default>\n  </default>\n  <worldbody>\n",
+    );
+    for chain in 0..n.div_ceil(50) {
+        let len = 50.min(n - chain * 50);
+        for i in 0..len {
+            s += &format!(
+                "    <body name=\"b{chain}_{i}\" pos=\"0 0 0.2\" childclass=\"link\">\n      <joint name=\"j{chain}_{i}\" type=\"hinge\" axis=\"0 1 0\"/>\n      <geom type=\"capsule\" fromto=\"0 0 0 0 0 0.2\"/>\n"
+            );
+        }
+        s += &"    </body>\n".repeat(len);
+    }
+    s + "  </worldbody>\n</mujoco>"
+}
+
+struct NoFiles;
+
+impl IncludeLoader for NoFiles {
+    fn load(&self, _file: &str) -> Option<String> {
+        None
+    }
+}
+
 // Few samples: before the quadratic fixes the largest size takes seconds per iteration.
 const SIZES: [usize; 3] = [1_000, 4_000, 16_000];
 
@@ -63,6 +89,19 @@ fn parse_rich(c: &mut Criterion) {
         g.throughput(Throughput::Bytes(src.len() as u64));
         g.bench_with_input(BenchmarkId::from_parameter(n), &src, |b, src| {
             b.iter(|| parse_urdf(black_box(src)).unwrap())
+        });
+    }
+    g.finish();
+}
+
+fn parse_mjcf_chain(c: &mut Criterion) {
+    let mut g = c.benchmark_group("parse_mjcf");
+    g.sample_size(10);
+    for n in SIZES {
+        let src = chain_mjcf(n);
+        g.throughput(Throughput::Bytes(src.len() as u64));
+        g.bench_with_input(BenchmarkId::from_parameter(n), &src, |b, src| {
+            b.iter(|| parse_mjcf(black_box(src), &NoFiles).unwrap())
         });
     }
     g.finish();
@@ -144,5 +183,14 @@ fn corpus(c: &mut Criterion) {
     g.finish();
 }
 
-criterion_group!(benches, parse, parse_rich, lint_all, lint_rich, report_all, corpus);
+criterion_group!(
+    benches,
+    parse,
+    parse_rich,
+    parse_mjcf_chain,
+    lint_all,
+    lint_rich,
+    report_all,
+    corpus
+);
 criterion_main!(benches);

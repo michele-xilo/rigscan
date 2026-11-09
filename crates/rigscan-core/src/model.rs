@@ -105,6 +105,8 @@ pub enum Format {
 pub struct Robot {
     pub format: Format,
     pub name: Option<String>,
+    /// The robot element, or the start of the file when the format has none.
+    pub span: Span,
     pub links: Vec<Link>,
     pub joints: Vec<Joint>,
 }
@@ -114,6 +116,7 @@ impl Robot {
         Robot {
             format,
             name: None,
+            span: Span { line: 1, col: 1 },
             links: Vec::new(),
             joints: Vec::new(),
         }

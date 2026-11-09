@@ -143,3 +143,30 @@ fn joint_without_parent_element_is_reported() {
     assert_eq!(f.len(), 1, "{f:?}");
     assert!(f[0].message.contains("no parent link"), "{}", f[0].message);
 }
+
+#[test]
+fn rs007_robot_without_links_is_reported_at_the_robot_element() {
+    let f = run("");
+
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(f[0].rule, "RS007");
+    assert_eq!(f[0].severity, Severity::Critical);
+    assert_eq!(f[0].span, Span { line: 1, col: 1 });
+    assert!(f[0].message.contains("no links"), "{}", f[0].message);
+}
+
+#[test]
+fn rs007_span_points_at_the_robot_element_not_the_file_start() {
+    let src = "<?xml version=\"1.0\"?>\n<!-- generated -->\n  <robot name=\"t\"/>";
+
+    let f = lint(&parse_urdf(src).unwrap());
+
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!(f[0].rule, "RS007");
+    assert_eq!(f[0].span, Span { line: 3, col: 3 });
+}
+
+#[test]
+fn rs007_does_not_fire_for_a_robot_with_a_link() {
+    assert!(only(&run("<link name=\"a\"/>"), "RS007").is_empty());
+}

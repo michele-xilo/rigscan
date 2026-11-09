@@ -44,6 +44,7 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
         match (parent, name) {
             (None, "robot") => {
                 seen_robot = true;
+                robot.span = spans.at(start);
                 robot.name = attr(&e, "name")?
             }
             (Some(Ctx::Robot), "link") => robot.links.push(Link {

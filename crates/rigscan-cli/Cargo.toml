@@ -11,5 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.6.7", features = ["derive"] }
+ignore = "0.4.34"
+rayon = "1.12.0"
 rigscan-core = { path = "../rigscan-core" }
 serde_json = "1.0.149"

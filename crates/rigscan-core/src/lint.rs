@@ -39,6 +39,10 @@ pub fn lint(robot: &Robot) -> Vec<Finding> {
             }
         }
     }
+    // RS007: a robot without links has nothing to check, so every other rule passes vacuously.
+    if robot.links.is_empty() {
+        findings.push(critical("RS007", "robot has no links".into(), robot.span));
+    }
     duplicate_names(robot, &mut findings);
     tree_shape(robot, &mut findings);
     findings

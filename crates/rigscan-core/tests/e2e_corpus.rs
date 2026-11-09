@@ -10,6 +10,8 @@ use std::time::{Duration, Instant};
 
 const REPS: usize = 5;
 const CASES_PER_MODE: usize = 25;
+/// Real problems in upstream files; the test fails if one stops being reported.
+const KNOWN_FINDINGS: [(&str, &str); 1] = [("ur_description/urdf/ur3.urdf", "RS007")];
 const DEFAULT_SEED: u64 = 0x5249_4753_4341_4E31;
 
 struct Corpus {
@@ -123,14 +125,16 @@ fn corpus_lints_clean_and_reports_performance() {
     let mut elements = 0usize;
     for (path, src) in &corpus.files {
         let robot = parse_urdf(src).unwrap_or_else(|e| panic!("{}: {}", short(path), e.0));
-        let findings = lint(&robot);
-        assert!(
-            findings.is_empty(),
-            "{}: {} unexpected finding(s), first: {} {}",
-            short(path),
-            findings.len(),
-            findings[0].rule,
-            findings[0].message
+        let rules: Vec<&str> = lint(&robot).iter().map(|f| f.rule).collect();
+        let name = short(path);
+        let expected: Vec<&str> = KNOWN_FINDINGS
+            .iter()
+            .filter(|(file, _)| *file == name)
+            .map(|(_, rule)| *rule)
+            .collect();
+        assert_eq!(
+            rules, expected,
+            "{name}: findings differ from the known ones"
         );
         let parse = best_of(|| parse_urdf(src));
         let lint_time = best_of(|| lint(&robot));

@@ -59,7 +59,7 @@ UsdPhysics only), SDF, mesh conversion, simulation.
 ## Status (update when it changes)
 
 - Done: workspace, `rigscan-core` with a format-neutral `Robot` (#1), URDF parser (links, joints, spans, robot name, joint type/origin/limit/mimic, inertials, mesh refs; #5),
-  rules RS001-RS006 (structural), README, Apache-2.0 LICENSE.
+  rules RS001-RS007 (structural), README, Apache-2.0 LICENSE.
 - Builds for `wasm32-unknown-unknown` (compile check only, not run in a
   browser).
 - CLI: `rigscan scan <files>` (#2): `path:line:col: severity RULE: message`, exit 0/1/2. No report layer yet (#3).
@@ -103,6 +103,7 @@ because `.usdc` has no line numbers.
 | RS004 | critical | link has more than one parent joint (flagged on the extra joint) |
 | RS005 | critical | kinematic loop |
 | RS006 | critical | more than one root link (flagged on each extra root) |
+| RS007 | critical | robot has no links (flagged on the robot element) |
 
 Planned next: mass <= 0, inertia triangle inequality, inverted joint limits,
 unresolved mesh paths, mimic joints with bad references, units/scale sanity.
@@ -113,5 +114,6 @@ unresolved mesh paths, mimic joints with bad references, units/scale sanity.
   gitignored `corpus/`. The file list is `scripts/corpus-urdf.txt`.
 - `crates/rigscan-core/tests/e2e_corpus.rs`: lint every file (must be clean), perf report, then 200 seeded
   corruptions (8 modes x 25), each must be detected. Modes: RS001-RS006, invalid number, truncated XML.
-- Known: `ur_description/urdf/ur3.urdf` is an empty robot and lints clean (issue 43).
+- Known real finding: `ur_description/urdf/ur3.urdf` is an empty upstream robot, reported as RS007; the test
+  fails if it stops being reported.
 - Only URDF exists; MJCF and USD corpora wait for their parsers.

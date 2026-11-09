@@ -493,6 +493,7 @@ version = "0.0.1"
 dependencies = [
  "clap",
  "rigscan-core",
+ "serde_json",
 ]
 
 [[package]]

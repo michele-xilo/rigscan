@@ -66,3 +66,13 @@ fn document_without_robot_element_is_an_error() {
         assert!(parse_urdf(src).is_err(), "accepted {src:?}");
     }
 }
+
+#[test]
+fn span_columns_count_characters_not_bytes() {
+    let src = "<robot name=\"r\">\n<link name=\"é\"/><link name=\"b\"/>\n</robot>";
+    let robot = parse_urdf(src).unwrap();
+
+    // `<link name="é"/>` is 16 characters but 17 bytes.
+    assert_eq!(robot.links[0].span, Span { line: 2, col: 1 });
+    assert_eq!(robot.links[1].span, Span { line: 2, col: 17 });
+}

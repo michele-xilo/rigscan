@@ -20,9 +20,11 @@ pub struct Finding {
 pub fn lint(robot: &Robot) -> Vec<Finding> {
     let mut findings = Vec::new();
     // RS001: joint references a link that is not defined.
+    let link_names: std::collections::HashSet<&str> =
+        robot.links.iter().map(|l| l.name.as_str()).collect();
     for j in &robot.joints {
         for (role, name) in [("parent", &j.parent), ("child", &j.child)] {
-            if !robot.links.iter().any(|l| &l.name == name) {
+            if !link_names.contains(name.as_str()) {
                 findings.push(Finding {
                     rule: "RS001",
                     severity: Severity::Critical,

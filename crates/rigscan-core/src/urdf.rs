@@ -18,14 +18,8 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
         }
     }
 
-    fn span_at(src: &str, offset: usize) -> Span {
-        let before = &src[..offset];
-        let line = before.matches('\n').count() as u32 + 1;
-        let col = before.rsplit('\n').next().map_or(0, |l| l.chars().count()) as u32 + 1;
-        Span { line, col }
-    }
-
     let mut reader = Reader::from_str(src);
+    let mut spans = Spans::new(src);
     let mut robot = Robot::new(Format::Urdf);
     let mut joint: Option<Joint> = None;
 
@@ -58,14 +52,14 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
             }
             ("link", 1) => robot.links.push(Link {
                 name: attr(&e, "name")?.unwrap_or_default(),
-                span: span_at(src, start),
+                span: spans.at(start),
             }),
             ("joint", 1) => {
                 joint = Some(Joint {
                     name: attr(&e, "name")?.unwrap_or_default(),
                     parent: String::new(),
                     child: String::new(),
-                    span: span_at(src, start),
+                    span: spans.at(start),
                 })
             }
             ("parent", 2) => {
@@ -88,4 +82,44 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
         return Err(ParseError("no <robot> element found".into()));
     }
     Ok(robot)
+}
+
+/// Turns byte offsets into line and column. Offsets arrive in increasing
+/// order, so each call only scans the text since the previous one; rescanning
+/// from the start of the file made parsing quadratic.
+struct Spans<'a> {
+    src: &'a str,
+    offset: usize,
+    line: u32,
+    col: u32,
+}
+
+impl<'a> Spans<'a> {
+    fn new(src: &'a str) -> Self {
+        Spans {
+            src,
+            offset: 0,
+            line: 1,
+            col: 1,
+        }
+    }
+
+    fn at(&mut self, offset: usize) -> Span {
+        if offset < self.offset {
+            *self = Spans::new(self.src);
+        }
+        let skipped = &self.src[self.offset..offset];
+        match skipped.rfind('\n') {
+            Some(i) => {
+                self.line += skipped.matches('\n').count() as u32;
+                self.col = 1 + skipped[i + 1..].chars().count() as u32;
+            }
+            None => self.col += skipped.chars().count() as u32,
+        }
+        self.offset = offset;
+        Span {
+            line: self.line,
+            col: self.col,
+        }
+    }
 }

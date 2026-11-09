@@ -12,8 +12,9 @@ is a feature, and it is measured, not assumed.
   (bytes/s or elements/s), not only time.
 - Do not optimize without a number. A change made for speed states the benchmark before and after, on the
   same machine, and is rejected if the gain is within noise.
-- Compare against a baseline: `cargo bench -- --save-baseline main` on `main`, then
-  `cargo bench -- --baseline main` on the branch. A regression of more than 5% on a hot path needs an
+- Compare against a baseline: `cargo bench -p rigscan-core --bench core -- --save-baseline main` on `main`,
+  then the same with `--baseline main` on the branch. Name the bench target: without `--bench`, cargo
+  also passes the flag to the lib's test harness, which rejects it. A regression of more than 5% on a hot path needs an
   explanation in the change.
 - CI only checks that benches compile (`cargo bench --no-run`). Timings on shared runners are too noisy to
   gate on.

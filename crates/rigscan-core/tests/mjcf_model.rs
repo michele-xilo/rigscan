@@ -1,9 +1,9 @@
-use rigscan_core::{lint, parse_mjcf, Format, IncludeLoader, JointKind, Robot, Span};
+use rigscan_core::{lint, parse_mjcf, Format, IncludeLoader, Included, JointKind, Robot, Span};
 
 struct NoFiles;
 
 impl IncludeLoader for NoFiles {
-    fn load(&self, _file: &str) -> Option<String> {
+    fn load(&self, _file: &str, _from: Option<&str>) -> Option<Included> {
         None
     }
 }
@@ -347,4 +347,27 @@ fn mesh_asset_without_a_file_gives_geoms_no_mesh_ref() {
     );
     assert!(r.links[0].meshes.is_empty());
     assert!(r.unmapped.is_empty());
+}
+
+#[test]
+fn elements_from_an_included_file_are_reported_at_the_include() {
+    struct One;
+    impl IncludeLoader for One {
+        fn load(&self, file: &str, _from: Option<&str>) -> Option<Included> {
+            (file == "arm.xml").then(|| Included {
+                path: file.into(),
+                text: "<mujoco>\n\n\n<body name=\"a\"><joint name=\"j\"/></body>\n</mujoco>".into(),
+            })
+        }
+    }
+    let r = parse_mjcf(
+        "<mujoco>\n<worldbody>\n  <include file=\"arm.xml\"/>\n</worldbody>\n</mujoco>",
+        &One,
+    )
+    .unwrap()
+    .to_robot()
+    .unwrap();
+    let at = Span { line: 3, col: 3 };
+    assert_eq!(r.links[1].span, at);
+    assert_eq!(r.joints[0].span, at);
 }

@@ -5,7 +5,7 @@ mod resolve;
 use clap::{Parser, Subcommand, ValueEnum};
 use output::Scanned;
 use rayon::prelude::*;
-use rigscan_core::{lint_with, parse_urdf, Format, ParseError, Severity};
+use rigscan_core::{lint_with, parse_mjcf, parse_urdf, Format, Severity};
 use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -204,7 +204,9 @@ fn scan_file(path: &Path) -> Result<Scanned, String> {
     let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let robot = match format {
         Format::Urdf => parse_urdf(&src),
-        Format::Mjcf => Err(ParseError("MJCF is not supported yet".into())),
+        Format::Mjcf => {
+            parse_mjcf(&src, &resolve::FsLoader::for_file(path)).and_then(|m| m.to_robot())
+        }
     }
     .map_err(|e| format!("{}: {}", path.display(), e.0))?;
     let findings = lint_with(&robot, &resolve::FsResolver::for_file(path));
@@ -219,6 +221,16 @@ fn scan_file(path: &Path) -> Result<Scanned, String> {
 pub fn detect_format(path: &Path) -> Option<Format> {
     match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
         "urdf" => Some(Format::Urdf),
+        // `.xml` is also ROS launch files and package manifests.
+        "xml" if looks_like_mjcf(path) => Some(Format::Mjcf),
         _ => None,
     }
+}
+
+/// Whether the start of the file has a `<mujoco` root, without reading a large file whole.
+fn looks_like_mjcf(path: &Path) -> bool {
+    use std::io::Read;
+    let mut head = Vec::new();
+    let read = std::fs::File::open(path).and_then(|f| f.take(16 * 1024).read_to_end(&mut head));
+    read.is_ok() && head.windows(7).any(|w| w == b"<mujoco")
 }

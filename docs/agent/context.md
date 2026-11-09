@@ -63,8 +63,8 @@ UsdPhysics only), SDF, mesh conversion, simulation.
 - Builds for `wasm32-unknown-unknown` (compile check only, not run in a
   browser).
 - CLI: `rigscan scan <files>` (#2): `path:line:col: severity RULE: message`, exit 0/1/2. No report layer yet (#3).
-- MJCF: `parse_mjcf` gives a resolved element tree (#10) and `Mjcf::to_robot` maps it onto `Robot` (#11). No MJCF-specific rules and no CLI support yet.
-- Not done: MJCF rules and CLI scanning, conversion, bindings, playground.
+- MJCF: `parse_mjcf` gives a resolved element tree (#10) and `Mjcf::to_robot` maps it onto `Robot` (#11). `rigscan scan` reads MJCF (#60); no MJCF-specific rules yet.
+- Not done: MJCF-specific rules, conversion, bindings, playground.
 - A self-closing `<joint .../>` or a joint missing `<parent>`/`<child>` is kept
   with empty endpoints and reported by RS001 ("has no parent link").
 
@@ -127,6 +127,16 @@ tendons, equality constraints, contacts, sensors, keyframes, primitive geoms, bo
 
 RS004 accepts several joints between the same two links for MJCF and still flags a link reached from two different
 parents. RS013 applies to URDF only: MJCF joints may be unlimited and have no effort or velocity.
+
+## MJCF includes and spans
+
+`IncludeLoader::load(file, from)` returns `Included { path, text }`; `from` is the `path` of the file containing the
+`<include>` (`None` for the main file), because MuJoCo reads an include relative to the file that contains it. The
+CLI's `FsLoader` joins `file` to the directory of `from`. `Span` has no file, so every `MjcfNode` and `Reference`
+also has an `anchor`: its own `span` in the main file, and the outermost `<include>` for anything read from an
+included file. The mapper uses the anchor, so a finding on an included element prints the scanned file's path and
+the include's line. `.xml` is taken as MJCF when the first 16 KiB contain `<mujoco`; a directory scan skips other
+`.xml` files (ROS launch files, `package.xml`).
 
 ## Rule index
 

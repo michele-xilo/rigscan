@@ -1,11 +1,14 @@
-use rigscan_core::{parse_mjcf, IncludeLoader, Mjcf, MjcfNode, Span};
+use rigscan_core::{parse_mjcf, IncludeLoader, Included, Mjcf, MjcfNode, Span};
 use std::collections::HashMap;
 
 struct Files(HashMap<&'static str, &'static str>);
 
 impl IncludeLoader for Files {
-    fn load(&self, file: &str) -> Option<String> {
-        self.0.get(file).map(|s| s.to_string())
+    fn load(&self, file: &str, _from: Option<&str>) -> Option<Included> {
+        self.0.get(file).map(|s| Included {
+            path: file.to_string(),
+            text: s.to_string(),
+        })
     }
 }
 
@@ -270,4 +273,78 @@ fn undefined_childclass_is_recorded() {
     let m = parse("<mujoco><worldbody><body childclass=\"nope\"/></worldbody></mujoco>");
     assert_eq!(m.unknown_classes.len(), 1);
     assert_eq!(m.unknown_classes[0].name, "nope");
+}
+
+/// Resolves an include against the directory of the file that contains it, like MuJoCo.
+struct Relative(HashMap<&'static str, &'static str>);
+
+impl IncludeLoader for Relative {
+    fn load(&self, file: &str, from: Option<&str>) -> Option<Included> {
+        let dir = from.and_then(|f| f.rsplit_once('/')).map_or("", |(d, _)| d);
+        let path = if dir.is_empty() {
+            file.to_string()
+        } else {
+            format!("{dir}/{file}")
+        };
+        self.0.get(path.as_str()).map(|s| Included {
+            path,
+            text: s.to_string(),
+        })
+    }
+}
+
+fn relative(files: &[(&'static str, &'static str)]) -> Relative {
+    Relative(files.iter().copied().collect())
+}
+
+#[test]
+fn nested_include_is_read_relative_to_the_including_file() {
+    let loader = relative(&[
+        ("sub/a.xml", "<mujoco><include file=\"b.xml\"/></mujoco>"),
+        ("sub/b.xml", "<mujoco><body name=\"deep\"/></mujoco>"),
+    ]);
+    let m = parse_mjcf(
+        "<mujoco><worldbody><include file=\"sub/a.xml\"/></worldbody></mujoco>",
+        &loader,
+    )
+    .unwrap();
+    assert!(m.unresolved_includes.is_empty());
+    let deep = find(&m.root, "body")[0];
+    assert_eq!(deep.file.as_deref(), Some("sub/b.xml"));
+}
+
+#[test]
+fn main_file_elements_are_anchored_at_their_own_position() {
+    let m = parse("<mujoco>\n<worldbody>\n<body name=\"a\"/>\n</worldbody>\n</mujoco>");
+    let body = find(&m.root, "body")[0];
+    assert_eq!(body.anchor, body.span);
+    assert_eq!(body.anchor, at(3, 1));
+}
+
+#[test]
+fn included_elements_are_anchored_at_the_outermost_include() {
+    let loader = with(&[
+        ("a.xml", "<mujoco>\n\n<include file=\"b.xml\"/>\n</mujoco>"),
+        ("b.xml", "<mujoco>\n\n\n<body name=\"deep\"/>\n</mujoco>"),
+    ]);
+    let m = parse_mjcf(
+        "<mujoco>\n<worldbody>\n  <include file=\"a.xml\"/>\n</worldbody>\n</mujoco>",
+        &loader,
+    )
+    .unwrap();
+    let deep = find(&m.root, "body")[0];
+    assert_eq!(deep.span, at(4, 1));
+    assert_eq!(deep.anchor, at(3, 3));
+}
+
+#[test]
+fn problems_inside_an_included_file_are_anchored_at_the_include() {
+    let loader = with(&[(
+        "a.xml",
+        "<mujoco>\n<include file=\"gone.xml\"/>\n<worldbody><geom class=\"nope\"/></worldbody>\n</mujoco>",
+    )]);
+    let m = parse_mjcf("<mujoco>\n\n<include file=\"a.xml\"/>\n</mujoco>", &loader).unwrap();
+    assert_eq!(m.unresolved_includes[0].span, at(2, 1));
+    assert_eq!(m.unresolved_includes[0].anchor, at(3, 1));
+    assert_eq!(m.unknown_classes[0].anchor, at(3, 1));
 }

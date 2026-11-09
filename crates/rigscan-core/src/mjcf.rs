@@ -12,9 +12,13 @@ pub struct MjcfNode {
     pub tag: String,
     pub attrs: Vec<(String, String)>,
     pub children: Vec<MjcfNode>,
+    /// Position in the file this element was read from.
     pub span: Span,
     /// The included file this element was read from; `None` for the main file.
     pub file: Option<String>,
+    /// Where to report this element in the file that was scanned: `span` for the main file, the
+    /// outermost `<include>` for anything read from an included file.
+    pub anchor: Span,
 }
 
 impl MjcfNode {
@@ -32,6 +36,8 @@ pub struct Reference {
     pub name: String,
     pub span: Span,
     pub file: Option<String>,
+    /// See [`MjcfNode::anchor`].
+    pub anchor: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -41,10 +47,20 @@ pub struct Mjcf {
     pub unknown_classes: Vec<Reference>,
 }
 
+/// An included file as the loader found it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Included {
+    /// The loader's own name for the file, passed back as `from` for includes inside it.
+    pub path: String,
+    pub text: String,
+}
+
 /// Supplies the text of an included file. The core does no file access, so the caller provides this.
 pub trait IncludeLoader {
-    /// `file` is the path as written in the `include` element.
-    fn load(&self, file: &str) -> Option<String>;
+    /// `file` is the path as written in the `include` element. `from` is the `path` of the file
+    /// that contains the element, `None` for the main file: MuJoCo reads an include relative to
+    /// the file containing it. `None` returned means the file does not exist.
+    fn load(&self, file: &str, from: Option<&str>) -> Option<Included>;
 }
 
 /// Include nesting beyond this is treated as a cycle.
@@ -62,7 +78,7 @@ pub fn parse_mjcf(src: &str, loader: &dyn IncludeLoader) -> Result<Mjcf, ParseEr
         return Err(ParseError("no <mujoco> element found".into()));
     }
     let mut unresolved_includes = Vec::new();
-    expand_includes(&mut root, loader, 0, 1, &mut unresolved_includes)?;
+    expand_includes(&mut root, loader, None, 0, 1, &mut unresolved_includes)?;
     let classes = collect_classes(&root);
     let mut unknown_classes = Vec::new();
     apply_defaults(&mut root, "main", &classes, &mut unknown_classes);
@@ -138,12 +154,14 @@ fn node(e: &BytesStart, span: Span, file: Option<&str>) -> Result<MjcfNode, Pars
         children: Vec::new(),
         span,
         file: file.map(str::to_string),
+        anchor: span,
     })
 }
 
 fn expand_includes(
     node: &mut MjcfNode,
     loader: &dyn IncludeLoader,
+    from: Option<&str>,
     depth: usize,
     level: usize,
     unresolved: &mut Vec<Reference>,
@@ -151,7 +169,7 @@ fn expand_includes(
     let mut children = Vec::with_capacity(node.children.len());
     for mut child in std::mem::take(&mut node.children) {
         if child.tag != "include" {
-            expand_includes(&mut child, loader, depth, level + 1, unresolved)?;
+            expand_includes(&mut child, loader, from, depth, level + 1, unresolved)?;
             children.push(child);
             continue;
         }
@@ -161,11 +179,12 @@ fn expand_includes(
                 child.span.line, child.span.col
             ))
         })?;
-        let Some(text) = loader.load(name) else {
+        let Some(Included { path, text }) = loader.load(name, from) else {
             unresolved.push(Reference {
                 name: name.to_string(),
                 span: child.span,
                 file: child.file.clone(),
+                anchor: child.anchor,
             });
             continue;
         };
@@ -174,16 +193,37 @@ fn expand_includes(
                 "include of `{name}` nests more than {MAX_INCLUDE_DEPTH} levels deep (cycle?)"
             )));
         }
-        let mut included = read_tree(&text, Some(name), level)
-            .map_err(|ParseError(m)| ParseError(format!("{name}: {m}")))?;
+        let mut included = read_tree(&text, Some(&path), level)
+            .map_err(|ParseError(m)| ParseError(format!("{path}: {m}")))?;
         if included.tag != "mujoco" {
-            return Err(ParseError(format!("{name}: no <mujoco> element found")));
+            return Err(ParseError(format!("{path}: no <mujoco> element found")));
         }
-        expand_includes(&mut included, loader, depth + 1, level + 1, unresolved)?;
+        let before = unresolved.len();
+        expand_includes(
+            &mut included,
+            loader,
+            Some(&path),
+            depth + 1,
+            level + 1,
+            unresolved,
+        )?;
+        for r in &mut unresolved[before..] {
+            r.anchor = child.anchor;
+        }
+        for c in &mut included.children {
+            anchor_at(c, child.anchor);
+        }
         children.extend(included.children);
     }
     node.children = children;
     Ok(())
+}
+
+fn anchor_at(node: &mut MjcfNode, anchor: Span) {
+    node.anchor = anchor;
+    for c in &mut node.children {
+        anchor_at(c, anchor);
+    }
 }
 
 /// One `<default>` class: its parent and the attributes it sets per tag.
@@ -237,6 +277,7 @@ fn apply_defaults(
                         name: name.to_string(),
                         span: child.span,
                         file: child.file.clone(),
+                        anchor: child.anchor,
                     });
                 }
             }

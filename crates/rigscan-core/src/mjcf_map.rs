@@ -49,7 +49,7 @@ impl Mapper {
         let root = &mjcf.root;
         let mut robot = Robot::new(Format::Mjcf);
         robot.name = root.attr("model").map(str::to_string);
-        robot.span = root.span;
+        robot.span = root.anchor;
         let mut m = Mapper {
             robot,
             angle: std::f64::consts::PI / 180.0,
@@ -108,7 +108,7 @@ impl Mapper {
                     name: "world".into(),
                     inertial: None,
                     meshes: Vec::new(),
-                    span: world.span,
+                    span: world.anchor,
                 });
             }
             self.contents(world, "world", 0)?;
@@ -146,7 +146,7 @@ impl Mapper {
             name: name.clone(),
             inertial,
             meshes: Vec::new(),
-            span: node.span,
+            span: node.anchor,
         });
         for key in ORIENTATION {
             if node.attr(key).is_some() {
@@ -181,7 +181,7 @@ impl Mapper {
                 origin,
                 limit: None,
                 mimic: None,
-                span: node.span,
+                span: node.anchor,
             });
         }
         self.contents(node, &name, link)
@@ -236,7 +236,7 @@ impl Mapper {
                 velocity: None,
             }),
             mimic: None,
-            span: node.span,
+            span: node.anchor,
         })
     }
 
@@ -247,7 +247,7 @@ impl Mapper {
                 let filename = join(&self.meshdir, file);
                 self.robot.links[link].meshes.push(MeshRef {
                     filename,
-                    span: node.span,
+                    span: node.anchor,
                 });
             }
             // A mesh geom naming an unknown asset is left for the MJCF rules to report.
@@ -260,7 +260,7 @@ impl Mapper {
         self.robot.unmapped.push(Unmapped {
             what: what.to_string(),
             name: name.map(str::to_string),
-            span: node.span,
+            span: node.anchor,
         });
     }
 }
@@ -320,7 +320,7 @@ fn inertial(node: &MjcfNode) -> Result<Inertial, ParseError> {
     Ok(Inertial {
         mass,
         inertia,
-        span: node.span,
+        span: node.anchor,
     })
 }
 

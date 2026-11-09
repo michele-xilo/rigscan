@@ -2,7 +2,7 @@
 """Run popular URDF tools next to Rigscan on the same inputs.
 
     uv run --project scripts/compare python scripts/compare/compare.py          # refresh goldens.json and the README coverage table
-    uv run --project scripts/compare python scripts/compare/compare.py --bench  # also refresh the README speed tables
+    uv run --project scripts/compare python scripts/compare/compare.py --bench  # also refresh the README speed table (run the corpus bench first)
     python3 scripts/compare/compare.py --check                                  # CI: no tools needed
 
 Needs `cargo build --release -p rigscan-cli` and, for --bench, the corpus (see README).
@@ -28,6 +28,8 @@ RIGSCAN = ROOT / "target/release/rigscan"
 ROBOTS = ROOT / "corpus/example-robot-data/robots"
 RIGS = ["double_pendulum", "ur5_robot", "panda", "go2", "talos_full_v2"]
 TOOLS = ["mujoco", "pinocchio", "yourdfpy"]
+# MuJoCo compiles meshes and cannot resolve package:// paths, so it has no comparable load time on corpus rigs.
+SPEED_TOOLS = ["pinocchio", "yourdfpy"]
 PACKAGES = {"mujoco": "mujoco", "pinocchio": "pin", "yourdfpy": "yourdfpy"}
 REPS = 20
 
@@ -214,39 +216,36 @@ def corpus_commit():
     return src.read_text().strip().splitlines()[-1] if src.exists() else "unknown"
 
 
-def speed_tables(goldens):
-    rig_paths = [next(ROBOTS.rglob(f"{r}.urdf")) for r in RIGS]
-    header = "| Rig | Size | Rigscan CLI | MuJoCo | Pinocchio | yourdfpy |\n|---|--:|--:|--:|--:|--:|"
+def criterion_ms(rig):
+    """Median parse plus lint time from `cargo bench -p rigscan-core --bench core -- corpus`."""
+    est = ROOT / "target/criterion/corpus" / rig / "new/estimates.json"
+    if not est.exists():
+        sys.exit(f"missing {est}; run: cargo bench -p rigscan-core --bench core -- corpus")
+    return json.loads(est.read_text())["median"]["point_estimate"] / 1e6
+
+
+def speed_table(goldens):
+    header = "| Rig | Size | Rigscan | Pinocchio | yourdfpy |\n|---|--:|--:|--:|--:|"
     rows = []
-    for path in rig_paths:
-        cells = [f"{best_of(lambda: rigscan_run(path)[1], 5) * 1000:.1f}"]
-        for tool in TOOLS:
+    for rig in RIGS:
+        path = next(ROBOTS.rglob(f"{rig}.urdf"))
+        cells = [f"{criterion_ms(rig):.3f}"]
+        for tool in SPEED_TOOLS:
             outcome, _, _ = attempt(tool, path)
-            cells.append(ms(best_of(lambda: attempt(tool, path)[2], 5)) if outcome == "ok" else outcome)
-        rows.append(f"| `{path.stem}` | {path.stat().st_size / 1024:.0f} KiB | " + " | ".join(cells) + " |")
-    whole = "\n".join([header, *rows])
-
-    header = "| Probe | Rigscan CLI | MuJoCo | Pinocchio | yourdfpy |\n|---|--:|--:|--:|--:|"
-    rows = []
-    for path in probes():
-        cells = [ms(best_of(lambda: rigscan_run(path)[1]))]
-        for tool in TOOLS:
-            cells.append(ms(best_of(lambda: attempt(tool, path)[2])))
-        rows.append(f"| `{path.stem}` | " + " | ".join(cells) + " |")
-    per_probe = "\n".join([header, *rows])
-
+            cells.append(f"{best_of(lambda: attempt(tool, path)[2]) * 1000:.3f}" if outcome == "ok" else outcome)
+        rows.append(f"| `{rig}` | {path.stat().st_size / 1024:.0f} KiB | " + " | ".join(cells) + " |")
     v = goldens["versions"]
     note = (
-        f"Milliseconds, best of {REPS} (rigs: best of 5), warm. "
+        f"Milliseconds to load one file with the process already running. Rigscan: criterion median of "
+        f"parse plus lint (`cargo bench -p rigscan-core --bench core -- corpus`). Python tools: best of {REPS} "
+        "in-process calls, imports excluded; yourdfpy time includes its validate(). "
         f"Corpus: Gepetto/example-robot-data `{corpus_commit()[:12]}`. "
-        f"Rigscan `{goldens['rigscan']}`, MuJoCo {v['mujoco']}, Pinocchio {v['pinocchio']}, yourdfpy {v['yourdfpy']}, "
+        f"Rigscan commit {subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=ROOT, capture_output=True, text=True).stdout.strip()}, Pinocchio {v['pinocchio']}, yourdfpy {v['yourdfpy']}, "
         f"Python {platform.python_version()}, {cpu()}, {platform.system()} {platform.release()}. "
-        "Rigscan is timed as a whole process (startup included); the Python tools are timed in-process "
-        "(interpreter startup and imports excluded), so the comparison favours them. "
-        "A tool that rejects or logs an error on a rig is shown by that outcome instead of a time; "
-        "MuJoCo cannot resolve `package://` mesh paths."
+        "A tool that rejects or logs an error on a rig shows that outcome instead of a time. "
+        "MuJoCo is left out: it loads meshes and cannot resolve `package://` paths."
     )
-    return whole, per_probe, note
+    return f"{header}\n" + "\n".join(rows) + f"\n\n{note}"
 
 
 # ---- modes -----------------------------------------------------------------
@@ -296,9 +295,7 @@ def main():
     GOLDENS.write_text(json.dumps(goldens, indent=2, sort_keys=True) + "\n")
     text = splice(README.read_text(), "coverage", coverage_table(goldens))
     if args.bench:
-        whole, per_probe, note = speed_tables(goldens)
-        text = splice(text, "speed", f"{whole}\n\n{note}")
-        text = splice(text, "speed-probes", f"{per_probe}\n\n{note}")
+        text = splice(text, "speed", speed_table(goldens))
     README.write_text(text)
 
 

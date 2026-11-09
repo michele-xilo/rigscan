@@ -116,5 +116,33 @@ fn report_all(c: &mut Criterion) {
     g.finish();
 }
 
-criterion_group!(benches, parse, parse_rich, lint_all, lint_rich, report_all);
+/// Corpus rigs the README comparison reports; skipped with a message when the corpus is absent.
+const CORPUS_RIGS: [&str; 5] = [
+    "double_pendulum_description/urdf/double_pendulum.urdf",
+    "ur_description/urdf/ur5_robot.urdf",
+    "panda_description/urdf/panda.urdf",
+    "go2_description/urdf/go2.urdf",
+    "talos_data/robots/talos_full_v2.urdf",
+];
+
+/// Parse plus lint, which is what one `scan` does to a file, without process startup.
+fn corpus(c: &mut Criterion) {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../corpus/example-robot-data/robots");
+    let mut g = c.benchmark_group("corpus");
+    for rig in CORPUS_RIGS {
+        let Ok(src) = std::fs::read_to_string(root.join(rig)) else {
+            eprintln!("skipping corpus/{rig}: corpus not present (see README)");
+            continue;
+        };
+        let name = rig.rsplit('/').next().unwrap().trim_end_matches(".urdf");
+        g.throughput(Throughput::Bytes(src.len() as u64));
+        g.bench_function(name, |b| {
+            b.iter(|| lint(&parse_urdf(black_box(&src)).unwrap()))
+        });
+    }
+    g.finish();
+}
+
+criterion_group!(benches, parse, parse_rich, lint_all, lint_rich, report_all, corpus);
 criterion_main!(benches);

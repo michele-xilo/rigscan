@@ -307,3 +307,44 @@ fn bodies_inside_a_frame_are_reported_as_unmapped_not_dropped_silently() {
     );
     assert!(r.unmapped.iter().any(|u| u.what == "frame"));
 }
+
+#[test]
+fn wrong_number_count_is_an_error_with_its_position() {
+    let e = parse_mjcf(
+        "<mujoco>\n<worldbody><body name=\"a\" pos=\"1 2\"/></worldbody></mujoco>",
+        &NoFiles,
+    )
+    .unwrap()
+    .to_robot()
+    .unwrap_err();
+    assert!(
+        e.0.starts_with("2:") && e.0.contains("needs 3 numbers, found 2"),
+        "{}",
+        e.0
+    );
+}
+
+#[test]
+fn mesh_paths_without_meshdir_or_already_absolute_are_kept_as_written() {
+    let r = robot(
+        r#"<mujoco>
+  <compiler meshdir="assets"/>
+  <asset><mesh name="abs" file="/opt/m.stl"/></asset>
+  <worldbody><geom mesh="abs"/></worldbody>
+</mujoco>"#,
+    );
+    assert_eq!(r.links[0].meshes[0].filename, "/opt/m.stl");
+    let r = robot(
+        "<mujoco><asset><mesh name=\"m\" file=\"m.stl\"/></asset><worldbody><geom mesh=\"m\"/></worldbody></mujoco>",
+    );
+    assert_eq!(r.links[0].meshes[0].filename, "m.stl");
+}
+
+#[test]
+fn mesh_asset_without_a_file_gives_geoms_no_mesh_ref() {
+    let r = robot(
+        "<mujoco><asset><mesh name=\"m\"/></asset><worldbody><geom mesh=\"m\"/></worldbody></mujoco>",
+    );
+    assert!(r.links[0].meshes.is_empty());
+    assert!(r.unmapped.is_empty());
+}

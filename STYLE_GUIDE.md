@@ -64,7 +64,7 @@ around you.
 ## Command line output
 
 - One finding per line: `path:line:col: severity RULE: message`.
-- Findings go to stdout; errors and diagnostics go to stderr.
+- Findings go to stdout; errors, warnings and the summary line go to stderr.
 - Exit codes: `0` clean, `1` critical findings, `2` a file could not be scanned.
 - Treat output as an interface. Change it additively.
 

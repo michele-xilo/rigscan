@@ -73,7 +73,9 @@ UsdPhysics only), SDF, mesh conversion, simulation.
 `Robot { format, name, span, links, joints }`. `Finding { rule, severity, message, span, element }`, where
 `Element` is `Robot`, `Link(index)` or `Joint(index)` (positions, so duplicate names stay distinct).
 `report(&Robot, &[Finding])` gives a `Status` per link and joint (worst finding wins) and a `Verdict`; the
-robot element is listed only when it has a finding. The CLI renders `text`, `report` and `json` (version 1).
+robot element is listed only when it has a finding. The CLI renders `text`, `full`, `report` and `json` (version 1). `rigscan scan` walks directories with the
+`ignore` crate (`.gitignore` honoured even outside a git repository), scans in parallel with rayon and collects
+in input order so output is deterministic. The summary line is on stderr to keep stdout equal to the findings.
 
 - `Link { name, inertial, meshes, span }`: `Inertial { mass: Option, inertia: Option<Inertia> }`,
   `MeshRef { filename, span }` from `<visual>` and `<collision>` geometry (#5).

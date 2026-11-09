@@ -9,6 +9,7 @@ use std::io::{self, Write};
 use std::path::Path;
 
 pub struct Scanned {
+    pub src: String,
     pub robot: Robot,
     pub format: Format,
     pub findings: Vec<Finding>,
@@ -51,13 +52,49 @@ fn element_name(robot: &Robot, e: Element) -> &str {
     }
 }
 
-pub fn format_finding(path: &Path, f: &Finding) -> String {
+const RED: &str = "31";
+const AMBER: &str = "33";
+const TEAL: &str = "36";
+
+pub fn paint(color: bool, code: &str, text: &str) -> String {
+    if color {
+        format!("\x1b[{code}m{text}\x1b[0m")
+    } else {
+        text.to_string()
+    }
+}
+
+fn severity_code(s: Severity) -> &'static str {
+    match s {
+        Severity::Warning => AMBER,
+        Severity::Critical => RED,
+    }
+}
+
+fn status_code(s: Status) -> &'static str {
+    match s {
+        Status::Healthy => TEAL,
+        Status::Warning => AMBER,
+        Status::Critical => RED,
+    }
+}
+
+pub fn healthy(color: bool, text: &str) -> String {
+    paint(color, TEAL, text)
+}
+
+pub fn problem(color: bool, text: &str) -> String {
+    paint(color, RED, text)
+}
+
+pub fn format_finding(path: &Path, f: &Finding, color: bool) -> String {
+    let word = severity(f.severity);
     format!(
         "{}:{}:{}: {} {}: {}",
         path.display(),
         f.span.line,
         f.span.col,
-        severity(f.severity),
+        paint(color, severity_code(f.severity), word),
         f.rule,
         f.message
     )
@@ -76,14 +113,77 @@ fn verdict_line(v: &Verdict) -> String {
     )
 }
 
-pub fn write_text(out: &mut impl Write, path: &Path, s: &Scanned) -> io::Result<()> {
+pub fn write_text(out: &mut impl Write, path: &Path, s: &Scanned, color: bool) -> io::Result<()> {
     for f in &s.findings {
-        writeln!(out, "{}", format_finding(path, f))?;
+        writeln!(out, "{}", format_finding(path, f, color))?;
     }
     Ok(())
 }
 
-pub fn write_report(out: &mut impl Write, path: &Path, s: &Scanned) -> io::Result<()> {
+fn line_starts(src: &str) -> Vec<usize> {
+    std::iter::once(0)
+        .chain(src.match_indices('\n').map(|(i, _)| i + 1))
+        .collect()
+}
+
+fn line_text<'a>(src: &'a str, starts: &[usize], line: u32) -> &'a str {
+    let Some(&from) = starts.get(line as usize - 1) else {
+        return "";
+    };
+    let to = starts.get(line as usize).copied().unwrap_or(src.len());
+    src[from..to].trim_end_matches(['\n', '\r'])
+}
+
+/// Source line under each finding with a caret at its column. Tabs are copied into the padding so
+/// the caret lines up whatever the tab width, and columns count characters, not bytes.
+pub fn write_full(out: &mut impl Write, path: &Path, s: &Scanned, color: bool) -> io::Result<()> {
+    if s.findings.is_empty() {
+        return Ok(());
+    }
+    let starts = line_starts(&s.src);
+    for f in &s.findings {
+        let text = line_text(&s.src, &starts, f.span.line);
+        let pad = " ".repeat(f.span.line.to_string().len());
+        let code = severity_code(f.severity);
+        let head = format!("{}[{}]", severity(f.severity), f.rule);
+        let lead: String = text
+            .chars()
+            .take(f.span.col as usize - 1)
+            .map(|c| if c == '\t' { '\t' } else { ' ' })
+            .collect();
+        writeln!(out, "{}: {}", paint(color, code, &head), f.message)?;
+        writeln!(
+            out,
+            "{pad}--> {}:{}:{}",
+            path.display(),
+            f.span.line,
+            f.span.col
+        )?;
+        writeln!(out, "{pad} |")?;
+        writeln!(out, "{} | {text}", f.span.line)?;
+        writeln!(out, "{pad} | {lead}{}", paint(color, code, "^"))?;
+        writeln!(out)?;
+    }
+    Ok(())
+}
+
+/// Findings per rule across all files, most frequent first.
+pub fn write_statistics(out: &mut impl Write, scanned: &[&Scanned], color: bool) -> io::Result<()> {
+    // A rule has one severity, so it is kept with the count rather than in the key.
+    let mut counts: HashMap<&str, (usize, Severity)> = HashMap::new();
+    for f in scanned.iter().flat_map(|s| &s.findings) {
+        counts.entry(f.rule).or_insert((0, f.severity)).0 += 1;
+    }
+    let mut rows: Vec<_> = counts.into_iter().collect();
+    rows.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then(a.0.cmp(b.0)));
+    for (rule, (n, sev)) in rows {
+        let word = paint(color, severity_code(sev), severity(sev));
+        writeln!(out, "{n:>5}  {rule}  {word}")?;
+    }
+    Ok(())
+}
+
+pub fn write_report(out: &mut impl Write, path: &Path, s: &Scanned, color: bool) -> io::Result<()> {
     let r = report(&s.robot, &s.findings);
     writeln!(out, "{}: {}", path.display(), verdict_line(&r.verdict))?;
     let mut by_element: HashMap<Element, Vec<&Finding>> = HashMap::new();
@@ -91,15 +191,17 @@ pub fn write_report(out: &mut impl Write, path: &Path, s: &Scanned) -> io::Resul
         by_element.entry(f.element).or_default().push(f);
     }
     for e in &r.elements {
+        let word = status(e.status);
         writeln!(
             out,
-            "  {:<8} {:<5} {}",
-            status(e.status),
+            "  {}{} {:<5} {}",
+            paint(color, status_code(e.status), word),
+            " ".repeat(8 - word.len()),
             kind(e.element),
             e.name
         )?;
         for f in by_element.get(&e.element).into_iter().flatten() {
-            writeln!(out, "    {}", format_finding(path, f))?;
+            writeln!(out, "    {}", format_finding(path, f, color))?;
         }
     }
     Ok(())

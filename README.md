@@ -35,18 +35,28 @@ cargo run -p rigscan-cli -- scan robot.urdf
 # robot.urdf:5:5: critical RS001: joint `j1` child link `ghost` is not defined
 ```
 
-`rigscan scan` takes one or more files and exits 0 when clean, 1 when there
-are critical findings, and 2 when a file cannot be scanned. File type is
-detected from the extension (`.urdf` for now).
+`rigscan scan` takes files and directories (default: the current directory).
+Directories are searched recursively for supported files (`.urdf` for now),
+skipping anything in `.gitignore`; a file named on the command line is always
+scanned. Files are scanned in parallel and the output is sorted, so it is the
+same on every run. Findings go to stdout and a summary (`Found 3 findings in
+2 files.` or `All checks passed!`) to stderr. It exits 0 when clean, 1 when there
+are critical findings, and 2 when a file cannot be scanned.
 
 `--output-format` picks the output:
 
 - `text` (default): one line per finding, as above.
+- `full`: each finding with its source line and a caret under the column.
 - `report`: a verdict line per file, then the status of every link and joint
   with its findings underneath. There is no numeric score.
 - `json`: one document with `version`, `files` (verdict, element statuses and
   findings with line and column, or an `error` for a file that could not be
   scanned) and a `summary`.
+
+Other options: `--statistics` counts findings per rule, `-q`/`--quiet` prints
+only the summary and only when something is wrong, and `--color
+auto|always|never` controls colour (teal healthy, amber warning, red critical;
+`auto` honours `NO_COLOR`).
 
 ```bash
 cargo run -p rigscan-cli -- scan --output-format report robot.urdf

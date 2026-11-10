@@ -1,0 +1,5 @@
+<mujoco>
+  <worldbody>
+    <body childclass="missing"><geom type="sphere" size="0.1"/></body>
+  </worldbody>
+</mujoco>

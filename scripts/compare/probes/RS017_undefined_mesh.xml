@@ -1,0 +1,5 @@
+<mujoco>
+  <worldbody>
+    <body><geom type="mesh" mesh="ghost"/></body>
+  </worldbody>
+</mujoco>

@@ -70,9 +70,8 @@ impl Mapper {
                 m.meshdir = dir.to_string();
             }
         }
-        for mesh in children(root, "asset").flat_map(|a| children(a, "mesh")) {
-            if let Some(file) = mesh.attr("file") {
-                let name = mesh.attr("name").unwrap_or_else(|| stem(file));
+        for (name, file) in mesh_assets(root) {
+            if let Some(file) = file {
                 m.meshes.insert(name.to_string(), file.to_string());
             }
         }
@@ -250,7 +249,7 @@ impl Mapper {
                     span: node.anchor,
                 });
             }
-            // A mesh geom naming an unknown asset is left for the MJCF rules to report.
+            // RS017 reports a mesh geom naming an unknown asset.
             None if node.attr("mesh").is_some() => {}
             None => self.lose("geom", node.attr("name"), node),
         }
@@ -265,8 +264,20 @@ impl Mapper {
     }
 }
 
-fn children<'a>(node: &'a MjcfNode, tag: &'a str) -> impl Iterator<Item = &'a MjcfNode> {
+pub(crate) fn children<'a>(node: &'a MjcfNode, tag: &'a str) -> impl Iterator<Item = &'a MjcfNode> {
     node.children.iter().filter(move |c| c.tag == tag)
+}
+
+/// Every mesh asset as (name, file). A mesh built from inline vertices has a name and no file;
+/// one with neither has no name to refer to it by and is left out.
+pub(crate) fn mesh_assets(root: &MjcfNode) -> impl Iterator<Item = (&str, Option<&str>)> {
+    children(root, "asset")
+        .flat_map(|a| children(a, "mesh"))
+        .filter_map(|m| {
+            let file = m.attr("file");
+            let name = m.attr("name").or_else(|| file.map(stem))?;
+            Some((name, file))
+        })
 }
 
 /// The file name without directory and extension, which MuJoCo uses as a mesh's default name.

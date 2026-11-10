@@ -50,6 +50,9 @@ TITLES = {
     "RS013": "Joint limit missing or incomplete",
     "RS014": "Mesh file not found",
     "RS015": "Mimic of an undefined joint",
+    "RS016": "MJCF: unknown default class",
+    "RS017": "MJCF: mesh geom names an undefined asset",
+    "RS018": "MJCF: include file not found",
     "parse": "Malformed input (bad number, truncated XML)",
 }
 
@@ -151,7 +154,7 @@ def rigscan_run(path):
 
 
 def probes():
-    return sorted(PROBES.glob("*.urdf"))
+    return sorted([*PROBES.glob("*.urdf"), *PROBES.glob("*.xml")])
 
 
 def build_goldens():
@@ -164,6 +167,9 @@ def build_goldens():
         rules, _ = rigscan_run(path)
         entry = {"rigscan": rules}
         for tool in TOOLS:
+            if path.suffix == ".xml" and tool != "mujoco":
+                entry[tool] = {"outcome": "n/a", "message": ""}
+                continue
             outcome, message, _ = attempt(tool, path)
             entry[tool] = {"outcome": outcome, "message": message}
         out["probes"][path.stem] = entry
@@ -186,7 +192,10 @@ def coverage_table(goldens):
             "yes" if all(key in e["rigscan"] or (key == "parse" and e["rigscan"] == ["error"]) for e in entries) else "no"
         ]
         for tool in TOOLS:
-            flagged = [e[tool]["outcome"] != "ok" for e in entries]
+            if all(e[tool]["outcome"] == "n/a" for e in entries):
+                cells.append("-")
+                continue
+            flagged = [e[tool]["outcome"] not in ("ok", "n/a") for e in entries]
             cells.append("yes" if all(flagged) else "partly" if any(flagged) else "no")
         label = f"`{key}` {TITLES[key]}" if key != "parse" else TITLES[key]
         rows.append(f"| {label} | " + " | ".join(cells) + " |")

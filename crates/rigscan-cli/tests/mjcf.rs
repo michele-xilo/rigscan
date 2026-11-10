@@ -160,3 +160,20 @@ fn explicit_xml_that_is_not_mjcf_is_an_unsupported_file() {
         stderr(&out)
     );
 }
+
+#[test]
+fn mjcf_rules_run_in_the_cli() {
+    let dir = tree(
+        "rules",
+        &[(
+            "robot.xml",
+            "<mujoco>\n  <include file=\"gone.xml\"/>\n  <worldbody>\n    <body childclass=\"nope\"><geom type=\"mesh\" mesh=\"ghost\"/></body>\n  </worldbody>\n</mujoco>",
+        )],
+    );
+    let o = run(&dir, &["robot.xml"]);
+    let out = stdout(&o);
+    assert!(out.contains("robot.xml:2:3: critical RS018"), "{out}");
+    assert!(out.contains("robot.xml:4:5: critical RS016"), "{out}");
+    assert!(out.contains("robot.xml:4:29: critical RS017"), "{out}");
+    assert_eq!(o.status.code(), Some(1));
+}

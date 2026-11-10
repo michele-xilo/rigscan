@@ -1,0 +1,4 @@
+<mujoco>
+  <include file="gone.xml"/>
+  <worldbody/>
+</mujoco>

@@ -59,12 +59,12 @@ UsdPhysics only), SDF, mesh conversion, simulation.
 ## Status (update when it changes)
 
 - Done: workspace, `rigscan-core` with a format-neutral `Robot` (#1), URDF parser (links, joints, spans, robot name, joint type/origin/limit/mimic, inertials, mesh refs; #5),
-  rules RS001-RS018 (structure, mass and inertia, joint limits, mesh files, mimic joints, MJCF names), README, Apache-2.0 LICENSE.
+  rules RS001-RS022 (structure, mass and inertia, joint limits, mesh files, mimic joints, MJCF names, USD physics), README, Apache-2.0 LICENSE.
 - Builds for `wasm32-unknown-unknown` (compile check only, not run in a
   browser).
 - CLI: `rigscan scan <files>` (#2): `path:line:col: severity RULE: message`, exit 0/1/2. No report layer yet (#3).
 - MJCF: `parse_mjcf` gives a resolved element tree (#10) and `Mjcf::to_robot` maps it onto `Robot` (#11). `rigscan scan` reads MJCF (#60) and runs `lint_mjcf`: the shared rules plus RS016-RS018.
-- USD: `parse_usd` composes a stage and `Usd::to_robot` maps UsdPhysics onto `Robot` (#15); `rigscan scan` reads `.usda`, `.usdc` and `.usd`; no USD-specific rules yet.
+- USD: `parse_usd` composes a stage and `Usd::to_robot` maps UsdPhysics onto `Robot` (#15); `rigscan scan` reads `.usda`, `.usdc` and `.usd`; runs `lint_usd`: the shared rules plus RS019-RS022.
 - Not done: conversion, bindings, playground.
 - A self-closing `<joint .../>` or a joint missing `<parent>`/`<child>` is kept
   with empty endpoints and reported by RS001 ("has no parent link").
@@ -165,6 +165,10 @@ different trademarks section); a release has to carry the notice in the crate's 
 synthetic 1000-body chain takes about 43 ms (4.7 to 7.3 MiB/s), most of it `openusd`'s composition, so USD is
 slower than URDF and MJCF.
 
+`lint_usd(&Usd, &Robot)` is the USD entry: `lint` plus RS019-RS022. `Usd` records `articulation_roots` and, per body,
+whether a collision shape sits at or under it (a collider belongs to its nearest rigid body), because a collider
+supplies the mass PhysX computes; a missing `PhysicsMassAPI` alone is not a finding. Findings carry `Span::NONE`.
+
 ## Rule index
 
 | ID | Severity | Meaning |
@@ -187,10 +191,14 @@ slower than URDF and MJCF.
 | RS016 | critical | MJCF: `class` or `childclass` names a default class that is not defined |
 | RS017 | critical | MJCF: mesh geom names an asset that is not defined; a mesh asset is named by `name`, else its file stem, and one with inline vertices still counts |
 | RS018 | critical | MJCF: `<include>` file does not exist |
+| RS019 | critical | USD: a joint connects a link to itself, or the world to itself (flagged on the joint) |
+| RS020 | warning | USD: rigid body with no mass (or zero) and no collision shape at or under it (flagged on the link) |
+| RS021 | warning | USD: the stage has joints but no prim with `PhysicsArticulationRootAPI` (flagged on the robot) |
+| RS022 | critical | USD: a reference, payload or sublayer could not be composed, from `Usd.composition_errors` (flagged on the robot) |
 
 `lint_mjcf(&Mjcf, &Robot, &dyn Resolver)` is the MJCF entry: `lint_with` on the mapped robot plus RS016-RS018.
 Those findings are on the `Robot` element at the anchor span, so one inside an included file prints the include's
-line. Probes for MJCF rules are `.xml` files in `scripts/compare/probes/`; only MuJoCo is run on them.
+line. Probes for MJCF rules are `.xml` files in `scripts/compare/probes/`; only MuJoCo is run on them. Probes for USD rules are `.usda`; none of the compared tools read USD.
 
 `lint` never touches files; `lint_with` asks a `Resolver` whether a reference exists. The CLI resolver treats
 `package://name/...` as the nearest ancestor directory called `name`. The corpus holds URDFs only, so a

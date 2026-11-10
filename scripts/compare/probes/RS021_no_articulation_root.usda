@@ -1,0 +1,17 @@
+#usda 1.0
+def Xform "r"
+{
+    def Xform "a" (prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"])
+    {
+        float physics:mass = 1
+    }
+    def Xform "b" (prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"])
+    {
+        float physics:mass = 1
+    }
+    def PhysicsRevoluteJoint "j"
+    {
+        rel physics:body0 = </r/a>
+        rel physics:body1 = </r/b>
+    }
+}

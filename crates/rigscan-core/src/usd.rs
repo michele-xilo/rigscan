@@ -5,7 +5,7 @@ use openusd::ar::{self, ResolvedPath};
 use openusd::sdf::Value;
 use openusd::usd::{Prim, PrimPredicate, Stage};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::rc::Rc;
 use std::time::SystemTime;
@@ -23,6 +23,8 @@ pub struct UsdBody {
     pub rigid: bool,
     pub mass: Option<f64>,
     pub inertia: Option<[f64; 3]>,
+    /// A prim with `PhysicsCollisionAPI` is this prim or under it, with no rigid body in between.
+    pub collision: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,6 +46,8 @@ pub struct Usd {
     pub bodies: Vec<UsdBody>,
     pub joints: Vec<UsdJoint>,
     pub unmapped: Vec<Unmapped>,
+    /// Prims with `PhysicsArticulationRootAPI`.
+    pub articulation_roots: Vec<String>,
     /// References, payloads and sublayers the loader could not supply, and other composition problems.
     pub composition_errors: Vec<String>,
 }
@@ -141,25 +145,31 @@ fn read(stage: &Stage) -> openusd::Result<Usd> {
         bodies: Vec::new(),
         joints: Vec::new(),
         unmapped: Vec::new(),
+        articulation_roots: Vec::new(),
         composition_errors: Vec::new(),
     };
     let mut targets = Vec::new();
+    let mut colliders = Vec::new();
     let prims = paths
         .iter()
         .filter_map(|p| Some((p, stage.prim(p.as_str()).ok()?)));
     for (p, prim) in prims {
-        prim_data(stage, &prim, p.as_str(), &mut usd, &mut targets)?;
+        let sinks = (&mut targets, &mut colliders);
+        prim_data(stage, &prim, p.as_str(), &mut usd, sinks)?;
     }
+    mark_colliders(&mut usd.bodies, &colliders);
     // A joint may connect a prim that is not a rigid body, such as a ground collider; it is still
     // a part of the structure as written. A target that does not exist is left out, so it reads
     // as an undefined link.
+    let mut known: HashSet<String> = usd.bodies.iter().map(|b| b.path.clone()).collect();
     for t in targets {
-        if !usd.bodies.iter().any(|b| b.path == t) {
+        if known.insert(t.clone()) {
             usd.bodies.push(UsdBody {
                 path: t,
                 rigid: false,
                 mass: None,
                 inertia: None,
+                collision: false,
             });
         }
     }
@@ -171,12 +181,35 @@ fn read(stage: &Stage) -> openusd::Result<Usd> {
     Ok(usd)
 }
 
+/// A collision shape belongs to the nearest rigid body at or above it.
+fn mark_colliders(bodies: &mut [UsdBody], colliders: &[String]) {
+    let index: HashMap<String, usize> = bodies
+        .iter()
+        .enumerate()
+        .map(|(i, b)| (b.path.clone(), i))
+        .collect();
+    for c in colliders {
+        let mut p = c.as_str();
+        loop {
+            if let Some(&i) = index.get(p) {
+                bodies[i].collision = true;
+                break;
+            }
+            match p.rfind('/') {
+                Some(at) if at > 0 => p = &p[..at],
+                _ => break,
+            }
+        }
+    }
+}
+
+/// `sinks` collects the prims a joint targets and the prims with a collision shape.
 fn prim_data(
     stage: &Stage,
     prim: &Prim,
     path: &str,
     usd: &mut Usd,
-    targets: &mut Vec<String>,
+    (targets, colliders): (&mut Vec<String>, &mut Vec<String>),
 ) -> openusd::Result<()> {
     let ty = prim.type_name()?.map(|t| t.to_string()).unwrap_or_default();
     let apis: Vec<String> = prim
@@ -204,6 +237,7 @@ fn prim_data(
             rigid: true,
             mass,
             inertia,
+            collision: false,
         });
     }
     if ty.starts_with("Physics") && ty.ends_with("Joint") {
@@ -245,7 +279,11 @@ fn prim_data(
     if ty == "PhysicsScene" {
         lose(usd, "scene", path);
     }
+    if has("PhysicsArticulationRootAPI") {
+        usd.articulation_roots.push(path.to_string());
+    }
     if has("PhysicsCollisionAPI") {
+        colliders.push(path.to_string());
         lose(usd, "collision", path);
     }
     if apis.iter().any(|a| a.starts_with("PhysicsDriveAPI")) {

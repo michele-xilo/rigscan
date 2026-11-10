@@ -32,6 +32,8 @@ TOOLS = ["mujoco", "pinocchio", "yourdfpy"]
 SPEED_TOOLS = ["pinocchio", "yourdfpy"]
 PACKAGES = {"mujoco": "mujoco", "pinocchio": "pin", "yourdfpy": "yourdfpy"}
 REPS = 20
+# Which probe formats each tool can load; a probe it cannot read is marked n/a.
+READS = {"mujoco": {".urdf", ".xml"}, "pinocchio": {".urdf"}, "yourdfpy": {".urdf"}}
 
 # One short title per rule; --check fails when a rule in core has no title or no probe.
 TITLES = {
@@ -53,6 +55,10 @@ TITLES = {
     "RS016": "MJCF: unknown default class",
     "RS017": "MJCF: mesh geom names an undefined asset",
     "RS018": "MJCF: include file not found",
+    "RS019": "USD: joint connects a link to itself",
+    "RS020": "USD: rigid body with no mass and no collider",
+    "RS021": "USD: joints without an articulation root",
+    "RS022": "USD: layer could not be composed",
     "parse": "Malformed input (bad number, truncated XML)",
 }
 
@@ -154,7 +160,7 @@ def rigscan_run(path):
 
 
 def probes():
-    return sorted([*PROBES.glob("*.urdf"), *PROBES.glob("*.xml")])
+    return sorted(p for ext in (".urdf", ".xml", ".usda") for p in PROBES.glob(f"*{ext}"))
 
 
 def build_goldens():
@@ -167,7 +173,7 @@ def build_goldens():
         rules, _ = rigscan_run(path)
         entry = {"rigscan": rules}
         for tool in TOOLS:
-            if path.suffix == ".xml" and tool != "mujoco":
+            if path.suffix not in READS[tool]:
                 entry[tool] = {"outcome": "n/a", "message": ""}
                 continue
             outcome, message, _ = attempt(tool, path)

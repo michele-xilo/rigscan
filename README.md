@@ -10,8 +10,8 @@ Rigscan scans robot description files, reports what is wrong with them, and
 The core is written in Rust and is designed to run as a CLI, in the browser via
 WebAssembly, and from Python.
 
-> **Status: pre-alpha.** URDF, MJCF and USD (UsdPhysics) reading, eighteen lint rules and a `scan`
-> command exist. There are no USD-specific rules, no conversion, and nothing is
+> **Status: pre-alpha.** URDF, MJCF and USD (UsdPhysics) reading, twenty-two lint rules and a `scan`
+> command exist. There is no conversion, and nothing is
 > published yet. The API will change.
 
 ## What works today
@@ -43,13 +43,17 @@ WebAssembly, and from Python.
   - `RS016` MJCF: a `class` or `childclass` naming a default class that is not defined
   - `RS017` MJCF: a mesh geom naming an asset that is not defined
   - `RS018` MJCF: an `<include>` file that does not exist
+  - `RS019` USD: a joint that connects a link to itself (or the world to itself)
+  - `RS020` USD: a rigid body with no mass and no collision shape, so its mass cannot be computed (warning)
+  - `RS021` USD: joints but no `PhysicsArticulationRootAPI` (warning)
+  - `RS022` USD: a reference, payload or sublayer that could not be found
 - `parse_mjcf` reads MJCF into an element tree with line and column spans, splicing in `include`d files
   through a caller-supplied loader and applying `default` classes. `to_robot()` maps it onto the same model
   URDF uses, so the structural and physics rules run on it, and lists what the model cannot hold.
   `lint_mjcf` runs those rules plus RS016-RS018, and `rigscan scan` reads MJCF files too.
 - `parse_usd` opens a USD stage (`.usda` or `.usdc`), composing references, payloads and sublayers through a
   caller-supplied loader, and `to_robot()` maps the UsdPhysics rigid bodies and joints onto the same model, so
-  the shared rules run on it. USD has no source positions, so findings name the file only (JSON `line` and
+  the shared rules run on it (`lint_usd` adds RS019-RS022). USD has no source positions, so findings name the file only (JSON `line` and
   `column` are `null`). `rigscan scan` reads `.usda`, `.usdc` and `.usd` files.
 - `rigscan-core` compiles for `wasm32-unknown-unknown`.
 
@@ -131,6 +135,10 @@ a tool flags that Rigscan does not are the target for new rules.
 | `RS016` MJCF: unknown default class | yes | yes | - | - |
 | `RS017` MJCF: mesh geom names an undefined asset | yes | yes | - | - |
 | `RS018` MJCF: include file not found | yes | yes | - | - |
+| `RS019` USD: joint connects a link to itself | yes | - | - | - |
+| `RS020` USD: rigid body with no mass and no collider | yes | - | - | - |
+| `RS021` USD: joints without an articulation root | yes | - | - | - |
+| `RS022` USD: layer could not be composed | yes | - | - | - |
 | Malformed input (bad number, truncated XML) | yes | yes | yes | yes |
 <!-- compare:coverage:end -->
 

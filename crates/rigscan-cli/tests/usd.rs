@@ -162,3 +162,34 @@ fn usd_files_are_found_by_a_directory_scan() {
     assert_eq!(stdout(&out).lines().count(), 1, "{}", stdout(&out));
     assert!(stdout(&out).starts_with("sub/b.usda:"), "{}", stdout(&out));
 }
+
+#[test]
+fn usd_rules_run_in_the_cli() {
+    let root = tree(
+        "rules",
+        &[(
+            "robot.usda",
+            r#"#usda 1.0
+def Xform "a" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {}
+def PhysicsFixedJoint "j"
+{
+    rel physics:body0 = </a>
+    rel physics:body1 = </a>
+}
+def "w" (references = @gone.usda@)
+{
+}
+"#,
+        )],
+    );
+    let out = run(&root, &["robot.usda"]);
+    let s = stdout(&out);
+    assert!(
+        s.contains("robot.usda: critical RS019: joint `/j` connects `/a` to itself"),
+        "{s}"
+    );
+    assert!(s.contains("robot.usda: warning RS020:"), "{s}");
+    assert!(s.contains("robot.usda: warning RS021:"), "{s}");
+    assert!(s.contains("robot.usda: critical RS022:"), "{s}");
+    assert_eq!(out.status.code(), Some(1));
+}

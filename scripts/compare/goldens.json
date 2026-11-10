@@ -325,6 +325,76 @@
         "outcome": "n/a"
       }
     },
+    "RS019_self_joint": {
+      "mujoco": {
+        "message": "",
+        "outcome": "n/a"
+      },
+      "pinocchio": {
+        "message": "",
+        "outcome": "n/a"
+      },
+      "rigscan": [
+        "RS005",
+        "RS019"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "n/a"
+      }
+    },
+    "RS020_massless_body": {
+      "mujoco": {
+        "message": "",
+        "outcome": "n/a"
+      },
+      "pinocchio": {
+        "message": "",
+        "outcome": "n/a"
+      },
+      "rigscan": [
+        "RS020"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "n/a"
+      }
+    },
+    "RS021_no_articulation_root": {
+      "mujoco": {
+        "message": "",
+        "outcome": "n/a"
+      },
+      "pinocchio": {
+        "message": "",
+        "outcome": "n/a"
+      },
+      "rigscan": [
+        "RS021"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "n/a"
+      }
+    },
+    "RS022_missing_reference": {
+      "mujoco": {
+        "message": "",
+        "outcome": "n/a"
+      },
+      "pinocchio": {
+        "message": "",
+        "outcome": "n/a"
+      },
+      "rigscan": [
+        "RS007",
+        "RS022"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "n/a"
+      }
+    },
     "healthy": {
       "mujoco": {
         "message": "",

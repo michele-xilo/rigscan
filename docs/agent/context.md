@@ -89,7 +89,7 @@ in input order so output is deterministic. The summary line is on stderr to keep
   `line:col:`. A scan stops at the first one. If users want all problems
   reported at once, make these findings instead.
 - Not yet: geoms with primitives, actuators, axis, link origins (#11, viewer),
-  USD data (#15), loss annotations (#18).
+  USD data (#15).
 
 Known risk for #11: an MJCF body can have several joints to its parent, or
 none. The model has one parent/child edge per joint, so RS004 would flag
@@ -125,6 +125,9 @@ origin. A body without `<inertial>` has no inertial because MuJoCo infers it fro
 tendons, equality constraints, contacts, sensors, keyframes, primitive geoms, body orientation (`quat`, `euler`,
 `axisangle`, `xyaxes`, `zaxis`; rotation is not converted, so `rpy` stays zero) and anything inside `frame`,
 `replicate`, `attach`, `composite` or `flexcomp`, which are not expanded.
+The URDF reader fills it too: each direct child of `<robot>`, `<link>`, `<joint>` or `<inertial>` that it does not read
+(`material`, `transmission`, `gazebo`, `visual`, `collision`, `axis`, `dynamics`, `safety_controller`, `calibration`,
+`inertial/origin`, unknown tags). A `visual` or `collision` is one entry; its geometry is not listed separately.
 
 RS004 accepts several joints between the same two links for MJCF and still flags a link reached from two different
 parents. RS013 applies to URDF only: MJCF joints may be unlimited and have no effort or velocity.

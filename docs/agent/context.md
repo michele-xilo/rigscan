@@ -179,4 +179,9 @@ Planned next: units/scale sanity.
   corruptions (8 modes x 25), each must be detected. Modes: RS001-RS006, invalid number, truncated XML.
 - Real findings in upstream files (empty robot, invalid inertias, zero mass on moving links) are listed with
   counts in `KNOWN_FINDINGS`; the test fails if one stops being reported or a new one appears.
-- Only URDF exists; MJCF and USD corpora wait for their parsers.
+- `scripts/fetch-mjcf-corpus.sh` downloads the 268 `.xml` files of MuJoCo Menagerie (no meshes) at a pinned commit into
+  `corpus/mujoco_menagerie`. `crates/rigscan-core/tests/e2e_mjcf_corpus.rs` parses every file with includes read from disk,
+  then maps and lints each model (a file that no other file includes) with `lint_mjcf` and no mesh resolver. Of the 268
+  files, 127 are models and 141 are include-only fragments, which are not linted alone. The two known findings are
+  keyframe-only files that nothing includes (RS007).
+- The USD corpus waits for its reader.

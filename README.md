@@ -180,6 +180,15 @@ cargo test --release -p rigscan-core --test e2e_corpus -- --nocapture
 Without the corpus the tests skip and say so; `RIGSCAN_REQUIRE_CORPUS=1` makes
 that a failure. `RIGSCAN_SEED=<n>` reruns the corruptions with another seed.
 
+MJCF is tested the same way on [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie): the
+script downloads its `.xml` files (4 MB, no meshes) at a pinned commit, and the test parses every file and
+lints each model, meaning each file no other file includes. Only known upstream findings are allowed.
+
+```bash
+scripts/fetch-mjcf-corpus.sh
+cargo test -p rigscan-core --test e2e_mjcf_corpus -- --nocapture
+```
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and the [style guide](STYLE_GUIDE.md).

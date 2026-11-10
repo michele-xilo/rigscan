@@ -219,4 +219,11 @@ Planned next: units/scale sanity.
   then maps and lints each model (a file that no other file includes) with `lint_mjcf` and no mesh resolver. Of the 268
   files, 127 are models and 141 are include-only fragments, which are not linted alone. The two known findings are
   keyframe-only files that nothing includes (RS007).
-- The USD corpus waits for its reader.
+- `scripts/fetch-usd-corpus.sh` fetches the `.usd`, `.usda` and `.usdc` files of newton-assets (Apache-2.0, 353 MB)
+  at a pinned commit into `corpus/newton_assets`, with a blobless sparse clone because the GitHub tree listing is
+  truncated. `crates/rigscan-core/tests/e2e_usd_corpus.rs` parses every file with layers read from disk, then maps and
+  lints each stage that no other file pulls in (39 of 195 files) with `lint_usd`. The known findings are three
+  warnings: massless bodies in apptronik_apollo and a G1 variant (RS020) and one false RS021 on h1_minimal, caused
+  by the openusd crate applying a list op's prepend before its delete.
+- UsdPhysics joins bodies in a graph, so RS004, RS005, RS006 and RS007 do not run on USD: closed chains, loops and free
+  bodies are valid, and a stage with no rigid bodies is a prop, not a broken robot.

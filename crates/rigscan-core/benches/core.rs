@@ -1,5 +1,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use rigscan_core::{lint, parse_mjcf, parse_urdf, report, IncludeLoader, Included};
+use rigscan_core::{
+    lint, lint_mjcf, parse_mjcf, parse_urdf, report, IncludeLoader, Included, Resolution, Resolver,
+};
 use std::hint::black_box;
 
 /// A chain of `n` links joined by `n - 1` fixed joints, one element per line.
@@ -120,6 +122,30 @@ fn mjcf_to_robot(c: &mut Criterion) {
     g.finish();
 }
 
+struct Unknown;
+
+impl Resolver for Unknown {
+    fn resolve(&self, _uri: &str) -> Resolution {
+        Resolution::Unknown
+    }
+}
+
+fn lint_mjcf_all(c: &mut Criterion) {
+    let mut g = c.benchmark_group("lint_mjcf");
+    g.sample_size(10);
+    for n in SIZES {
+        let mjcf = parse_mjcf(&chain_mjcf(n), &NoFiles).unwrap();
+        let robot = mjcf.to_robot().unwrap();
+        g.throughput(Throughput::Elements(
+            (robot.links.len() + robot.joints.len()) as u64,
+        ));
+        g.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, _| {
+            b.iter(|| lint_mjcf(black_box(&mjcf), black_box(&robot), &Unknown))
+        });
+    }
+    g.finish();
+}
+
 fn lint_all(c: &mut Criterion) {
     let mut g = c.benchmark_group("lint");
     g.sample_size(10);
@@ -202,6 +228,7 @@ criterion_group!(
     parse_rich,
     parse_mjcf_chain,
     mjcf_to_robot,
+    lint_mjcf_all,
     lint_all,
     lint_rich,
     report_all,

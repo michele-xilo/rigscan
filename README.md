@@ -10,8 +10,8 @@ Rigscan scans robot description files, reports what is wrong with them, and
 The core is written in Rust and is designed to run as a CLI, in the browser via
 WebAssembly, and from Python.
 
-> **Status: pre-alpha.** URDF parsing, fifteen lint rules and a `scan`
-> command exist. There is no MJCF-specific linting or USD support, no conversion, and nothing is
+> **Status: pre-alpha.** URDF and MJCF parsing, eighteen lint rules and a `scan`
+> command exist. There is no USD support, no conversion, and nothing is
 > published yet. The API will change.
 
 ## What works today
@@ -40,10 +40,13 @@ WebAssembly, and from Python.
     from the URDF's directory, and `package://name/...` in the nearest parent
     directory called `name`; a package it cannot locate is not reported
   - `RS015` a `<mimic>` of a joint that does not exist, or of the joint itself
+  - `RS016` MJCF: a `class` or `childclass` naming a default class that is not defined
+  - `RS017` MJCF: a mesh geom naming an asset that is not defined
+  - `RS018` MJCF: an `<include>` file that does not exist
 - `parse_mjcf` reads MJCF into an element tree with line and column spans, splicing in `include`d files
   through a caller-supplied loader and applying `default` classes. `to_robot()` maps it onto the same model
-  URDF uses, so the structural and physics rules run on it, and lists what the model cannot hold. It is a
-  `rigscan scan` reads MJCF files too, with the shared rules and no MJCF-specific ones yet.
+  URDF uses, so the structural and physics rules run on it, and lists what the model cannot hold.
+  `lint_mjcf` runs those rules plus RS016-RS018, and `rigscan scan` reads MJCF files too.
 - `rigscan-core` compiles for `wasm32-unknown-unknown`.
 
 ```bash
@@ -95,8 +98,9 @@ for f in lint(&robot) {
 
 ## Comparison with other tools
 
-Each check has a minimal probe URDF in `scripts/compare/probes/`. The same probes are fed to Rigscan and to
-three popular tools that read URDF: MuJoCo, Pinocchio (which uses urdfdom) and yourdfpy. A tool
+Each check has a minimal probe file in `scripts/compare/probes/`: a URDF, or an MJCF `.xml` for the MJCF
+rules. The same probes are fed to Rigscan and to three popular tools that read URDF: MuJoCo, Pinocchio (which
+uses urdfdom) and yourdfpy. Only MuJoCo reads MJCF, so the others show `-` for the MJCF checks. A tool
 "flags" a probe when it rejects the file or logs an error while loading it. These tools are loaders, not
 linters, so a `no` means the tool accepts that kind of broken robot, not that it is worse at its job. Checks
 a tool flags that Rigscan does not are the target for new rules.
@@ -119,6 +123,9 @@ a tool flags that Rigscan does not are the target for new rules.
 | `RS013` Joint limit missing or incomplete | yes | no | yes | yes |
 | `RS014` Mesh file not found | yes | no | no | no |
 | `RS015` Mimic of an undefined joint | yes | yes | no | no |
+| `RS016` MJCF: unknown default class | yes | yes | - | - |
+| `RS017` MJCF: mesh geom names an undefined asset | yes | yes | - | - |
+| `RS018` MJCF: include file not found | yes | yes | - | - |
 | Malformed input (bad number, truncated XML) | yes | yes | yes | yes |
 <!-- compare:coverage:end -->
 

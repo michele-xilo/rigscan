@@ -59,12 +59,12 @@ UsdPhysics only), SDF, mesh conversion, simulation.
 ## Status (update when it changes)
 
 - Done: workspace, `rigscan-core` with a format-neutral `Robot` (#1), URDF parser (links, joints, spans, robot name, joint type/origin/limit/mimic, inertials, mesh refs; #5),
-  rules RS001-RS015 (structure, mass and inertia, joint limits, mesh files, mimic joints), README, Apache-2.0 LICENSE.
+  rules RS001-RS018 (structure, mass and inertia, joint limits, mesh files, mimic joints, MJCF names), README, Apache-2.0 LICENSE.
 - Builds for `wasm32-unknown-unknown` (compile check only, not run in a
   browser).
 - CLI: `rigscan scan <files>` (#2): `path:line:col: severity RULE: message`, exit 0/1/2. No report layer yet (#3).
-- MJCF: `parse_mjcf` gives a resolved element tree (#10) and `Mjcf::to_robot` maps it onto `Robot` (#11). `rigscan scan` reads MJCF (#60); no MJCF-specific rules yet.
-- Not done: MJCF-specific rules, conversion, bindings, playground.
+- MJCF: `parse_mjcf` gives a resolved element tree (#10) and `Mjcf::to_robot` maps it onto `Robot` (#11). `rigscan scan` reads MJCF (#60) and runs `lint_mjcf`: the shared rules plus RS016-RS018.
+- Not done: conversion, bindings, playground.
 - A self-closing `<joint .../>` or a joint missing `<parent>`/`<child>` is kept
   with empty endpoints and reported by RS001 ("has no parent link").
 
@@ -157,6 +157,13 @@ the include's line. `.xml` is taken as MJCF when the first 16 KiB contain `<mujo
 | RS013 | critical | URDF only: revolute/prismatic joint without `<limit>`, or a limit without `effort` or `velocity` |
 | RS014 | critical | mesh file not found (flagged on the `<mesh>` element); only when the caller passes a `Resolver` to `lint_with`, and never when it answers `Unknown` |
 | RS015 | critical | `<mimic>` of an undefined joint or of the joint itself (flagged on the `<mimic>` element) |
+| RS016 | critical | MJCF: `class` or `childclass` names a default class that is not defined |
+| RS017 | critical | MJCF: mesh geom names an asset that is not defined; a mesh asset is named by `name`, else its file stem, and one with inline vertices still counts |
+| RS018 | critical | MJCF: `<include>` file does not exist |
+
+`lint_mjcf(&Mjcf, &Robot, &dyn Resolver)` is the MJCF entry: `lint_with` on the mapped robot plus RS016-RS018.
+Those findings are on the `Robot` element at the anchor span, so one inside an included file prints the include's
+line. Probes for MJCF rules are `.xml` files in `scripts/compare/probes/`; only MuJoCo is run on them.
 
 `lint` never touches files; `lint_with` asks a `Resolver` whether a reference exists. The CLI resolver treats
 `package://name/...` as the nearest ancestor directory called `name`. The corpus holds URDFs only, so a

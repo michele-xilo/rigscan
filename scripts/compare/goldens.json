@@ -274,6 +274,57 @@
         "outcome": "ok"
       }
     },
+    "RS016_unknown_class": {
+      "mujoco": {
+        "message": "XML Error: unknown default childclass",
+        "outcome": "reject"
+      },
+      "pinocchio": {
+        "message": "",
+        "outcome": "n/a"
+      },
+      "rigscan": [
+        "RS016"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "n/a"
+      }
+    },
+    "RS017_undefined_mesh": {
+      "mujoco": {
+        "message": "Error: mesh 'ghost' not found in geom 0",
+        "outcome": "reject"
+      },
+      "pinocchio": {
+        "message": "",
+        "outcome": "n/a"
+      },
+      "rigscan": [
+        "RS017"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "n/a"
+      }
+    },
+    "RS018_missing_include": {
+      "mujoco": {
+        "message": "XML Error: Error opening file 'gone.xml'",
+        "outcome": "reject"
+      },
+      "pinocchio": {
+        "message": "",
+        "outcome": "n/a"
+      },
+      "rigscan": [
+        "RS018"
+      ],
+      "yourdfpy": {
+        "message": "",
+        "outcome": "n/a"
+      }
+    },
     "healthy": {
       "mujoco": {
         "message": "",

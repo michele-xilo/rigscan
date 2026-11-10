@@ -5,7 +5,7 @@ mod resolve;
 use clap::{Parser, Subcommand, ValueEnum};
 use output::Scanned;
 use rayon::prelude::*;
-use rigscan_core::{lint_with, parse_mjcf, parse_urdf, Format, Severity};
+use rigscan_core::{lint_mjcf, lint_with, parse_mjcf, parse_urdf, Format, Severity};
 use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -202,14 +202,21 @@ fn scan_file(path: &Path) -> Result<Scanned, String> {
     let format =
         detect_format(path).ok_or_else(|| format!("{}: unsupported file type", path.display()))?;
     let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let robot = match format {
-        Format::Urdf => parse_urdf(&src),
-        Format::Mjcf => {
-            parse_mjcf(&src, &resolve::FsLoader::for_file(path)).and_then(|m| m.to_robot())
+    let resolver = resolve::FsResolver::for_file(path);
+    let at = |e: rigscan_core::ParseError| format!("{}: {}", path.display(), e.0);
+    let (robot, findings) = match format {
+        Format::Urdf => {
+            let robot = parse_urdf(&src).map_err(at)?;
+            let findings = lint_with(&robot, &resolver);
+            (robot, findings)
         }
-    }
-    .map_err(|e| format!("{}: {}", path.display(), e.0))?;
-    let findings = lint_with(&robot, &resolve::FsResolver::for_file(path));
+        Format::Mjcf => {
+            let mjcf = parse_mjcf(&src, &resolve::FsLoader::for_file(path)).map_err(at)?;
+            let robot = mjcf.to_robot().map_err(at)?;
+            let findings = lint_mjcf(&mjcf, &robot, &resolver);
+            (robot, findings)
+        }
+    };
     Ok(Scanned {
         src,
         robot,

@@ -1,0 +1,104 @@
+//! Maps the UsdPhysics data onto the format-neutral [`Robot`].
+
+use crate::model::{
+    Format, Inertia, Inertial, Joint, JointKind, Limit, Link, Origin, ParseError, Robot, Span,
+};
+use crate::usd::Usd;
+
+/// The link a joint with no `body0` or `body1` is attached to.
+const WORLD: &str = "world";
+
+impl Usd {
+    /// Map the bodies and joints onto the neutral model. A body is a link named by its prim path,
+    /// and a joint connects `body0` to `body1`; a missing end is the world. Nothing is added to
+    /// the structure beyond that root link.
+    pub fn to_robot(&self) -> Result<Robot, ParseError> {
+        let mut robot = Robot::new(Format::Usd);
+        robot.span = Span::NONE;
+        robot.unmapped = self.unmapped.clone();
+        if self
+            .joints
+            .iter()
+            .any(|j| j.body0.is_none() || j.body1.is_none())
+        {
+            robot.links.push(link(WORLD, None));
+        }
+        for b in &self.bodies {
+            let inertial = (b.mass.is_some() || b.inertia.is_some()).then(|| Inertial {
+                mass: b.mass,
+                inertia: b.inertia.map(|d| Inertia {
+                    ixx: d[0],
+                    iyy: d[1],
+                    izz: d[2],
+                    ixy: 0.0,
+                    ixz: 0.0,
+                    iyz: 0.0,
+                }),
+                span: Span::NONE,
+            });
+            robot.links.push(link(&b.path, inertial));
+        }
+        for j in &self.joints {
+            robot.joints.push(joint(j));
+        }
+        Ok(robot)
+    }
+}
+
+fn link(name: &str, inertial: Option<Inertial>) -> Link {
+    Link {
+        name: name.to_string(),
+        inertial,
+        meshes: Vec::new(),
+        span: Span::NONE,
+    }
+}
+
+fn joint(j: &crate::usd::UsdJoint) -> Joint {
+    let revolute = j.type_name == "PhysicsRevoluteJoint";
+    let limited = j.lower.is_some() || j.upper.is_some();
+    // USD authors revolute limits in degrees.
+    let scale = if revolute {
+        std::f64::consts::PI / 180.0
+    } else {
+        1.0
+    };
+    let kind = match j.type_name.as_str() {
+        "PhysicsRevoluteJoint" if limited => JointKind::Revolute,
+        "PhysicsRevoluteJoint" => JointKind::Continuous,
+        "PhysicsPrismaticJoint" => JointKind::Prismatic,
+        "PhysicsFixedJoint" => JointKind::Fixed,
+        other => JointKind::Other(other_name(other)),
+    };
+    let limit =
+        (limited && matches!(kind, JointKind::Revolute | JointKind::Prismatic)).then(|| Limit {
+            lower: j.lower.map(|v| v * scale),
+            upper: j.upper.map(|v| v * scale),
+            effort: None,
+            velocity: None,
+        });
+    Joint {
+        name: j.path.clone(),
+        parent: j.body0.clone().unwrap_or_else(|| WORLD.into()),
+        child: j.body1.clone().unwrap_or_else(|| WORLD.into()),
+        kind,
+        origin: Origin {
+            xyz: j.local_pos0,
+            ..Origin::default()
+        },
+        limit,
+        mimic: None,
+        span: Span::NONE,
+    }
+}
+
+/// `PhysicsSphericalJoint` to `spherical`; the generic `PhysicsJoint` to `joint`.
+fn other_name(type_name: &str) -> String {
+    let core = type_name.strip_prefix("Physics").unwrap_or(type_name);
+    let core = core.strip_suffix("Joint").unwrap_or(core);
+    if core.is_empty() {
+        "joint".into()
+    } else {
+        core.to_ascii_lowercase()
+    }
+}

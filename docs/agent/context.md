@@ -64,6 +64,7 @@ UsdPhysics only), SDF, mesh conversion, simulation.
   browser).
 - CLI: `rigscan scan <files>` (#2): `path:line:col: severity RULE: message`, exit 0/1/2. No report layer yet (#3).
 - MJCF: `parse_mjcf` gives a resolved element tree (#10) and `Mjcf::to_robot` maps it onto `Robot` (#11). `rigscan scan` reads MJCF (#60) and runs `lint_mjcf`: the shared rules plus RS016-RS018.
+- USD: `parse_usd` composes a stage and `Usd::to_robot` maps UsdPhysics onto `Robot` (#15); `rigscan scan` reads `.usda`, `.usdc` and `.usd`; no USD-specific rules yet.
 - Not done: conversion, bindings, playground.
 - A self-closing `<joint .../>` or a joint missing `<parent>`/`<child>` is kept
   with empty endpoints and reported by RS001 ("has no parent link").
@@ -139,6 +140,30 @@ the include's line. `.xml` is taken as MJCF when the first 16 KiB contain `<mujo
 `.xml` files (ROS launch files, `package.xml`). A directory scan also drops a file that another scanned file includes: `FsLoader` records the files it read and
 `scan` removes those results afterwards, counting only includes from files that scanned without error. A file named on the
 command line is always scanned.
+
+## USD to the neutral model
+
+`parse_usd(root, loader)` opens the stage with `openusd` (pinned `=0.8.0`) through an `ar::Resolver` that reads layers
+from a caller-supplied `UsdLoader` (bytes, because `.usdc` is binary), so the core does no file access and
+references, payloads and sublayers compose. It returns a plain `Usd { bodies, joints, unmapped, composition_errors }`;
+a reference the loader cannot supply is a `composition_errors` entry, not an error. `Usd::to_robot` makes a link of
+each prim with `PhysicsRigidBodyAPI`, named by its prim path, and of each prim a joint connects that is not a rigid
+body (a ground collider); a joint target that does not exist is not added, so RS001 reports it. Each `Physics*Joint`
+is one `Joint` from `body0` to `body1`; an empty end is the root link `world`, added only when a joint needs it.
+`PhysicsRevoluteJoint` is `Revolute` with a limit and `Continuous` without (limits are degrees in USD and become
+radians); prismatic limits stay as authored; fixed is `Fixed`; any other type is `Other` named after the type
+(`spherical`, `distance`, `joint`). `localPos0` is the joint origin, in stage units (`metersPerUnit` is not
+applied). A mass or diagonal inertia of zero means "computed from shapes" in USD and stays `None`.
+
+USD has no source positions, so every span is `Span::NONE` (line 0): the CLI prints the file path alone in `text`,
+`full` and `report`, and JSON `line` and `column` are `null`. `Robot.unmapped` lists scenes, collision shapes, drives,
+materials, `principalAxes` and a non-identity `localRot0`/`localRot1`. The CLI's `FsUsdLoader` records the layers
+read, and a directory scan drops a file that another scanned file pulled in, like MJCF includes.
+
+`openusd` is MIT except `core_schemas.rs`, under the Tomorrow Open Source Technology License 1.0 (Apache-2.0 with a
+different trademarks section); a release has to carry the notice in the crate's `third-party/`. Opening and reading a
+synthetic 1000-body chain takes about 43 ms (4.7 to 7.3 MiB/s), most of it `openusd`'s composition, so USD is
+slower than URDF and MJCF.
 
 ## Rule index
 

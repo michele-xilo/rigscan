@@ -5,11 +5,15 @@ mod resolve;
 use clap::{Parser, Subcommand, ValueEnum};
 use output::Scanned;
 use rayon::prelude::*;
-use rigscan_core::{lint_mjcf, lint_with, parse_mjcf, parse_urdf, Format, Severity};
+use rigscan_core::{
+    lint, lint_mjcf, lint_with, parse_mjcf, parse_urdf, parse_usd, Format, Severity,
+};
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::rc::Rc;
 
 #[derive(Parser)]
 #[command(version, about = "A health check for robot descriptions")]
@@ -239,7 +243,11 @@ fn write_output(
 fn scan_file(path: &Path) -> Result<Scanned, String> {
     let format =
         detect_format(path).ok_or_else(|| format!("{}: unsupported file type", path.display()))?;
-    let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    // A USD layer may be binary, and the stage reads its own files through the loader.
+    let src = match format {
+        Format::Usd => String::new(),
+        _ => std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?,
+    };
     let resolver = resolve::FsResolver::for_file(path);
     let at = |e: rigscan_core::ParseError| format!("{}: {}", path.display(), e.0);
     let (robot, findings, included) = match format {
@@ -260,6 +268,21 @@ fn scan_file(path: &Path) -> Result<Scanned, String> {
                 .collect();
             (robot, findings, included)
         }
+        Format::Usd => {
+            let read = Rc::new(RefCell::new(Vec::new()));
+            let loader = resolve::FsUsdLoader { read: read.clone() };
+            let usd = parse_usd(&path.display().to_string(), loader).map_err(at)?;
+            let robot = usd.to_robot().map_err(at)?;
+            let findings = lint(&robot);
+            let root = path.canonicalize().ok();
+            let included = read
+                .borrow()
+                .iter()
+                .filter_map(|p| p.canonicalize().ok())
+                .filter(|p| Some(p) != root.as_ref())
+                .collect();
+            (robot, findings, included)
+        }
     };
     Ok(Scanned {
         src,
@@ -273,6 +296,7 @@ fn scan_file(path: &Path) -> Result<Scanned, String> {
 pub fn detect_format(path: &Path) -> Option<Format> {
     match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
         "urdf" => Some(Format::Urdf),
+        "usda" | "usdc" | "usd" => Some(Format::Usd),
         // `.xml` is also ROS launch files and package manifests.
         "xml" if looks_like_mjcf(path) => Some(Format::Mjcf),
         _ => None,

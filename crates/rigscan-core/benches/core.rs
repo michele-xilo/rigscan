@@ -1,6 +1,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use rigscan_core::{
-    lint, lint_mjcf, parse_mjcf, parse_urdf, report, IncludeLoader, Included, Resolution, Resolver,
+    lint, lint_mjcf, parse_mjcf, parse_urdf, parse_usd, report, IncludeLoader, Included,
+    Resolution, Resolver, UsdLoader,
 };
 use std::hint::black_box;
 
@@ -65,6 +66,57 @@ impl IncludeLoader for NoFiles {
     fn load(&self, _file: &str, _from: Option<&str>) -> Option<Included> {
         None
     }
+}
+
+/// A chain of `n` rigid bodies joined by revolute joints, one prim per body and joint.
+fn chain_usd(n: usize) -> String {
+    let mut s = String::from("#usda 1.0\n(\n    defaultPrim = \"r\"\n)\ndef Xform \"r\"\n{\n");
+    for i in 0..n {
+        s += &format!(
+            "    def Xform \"b{i}\" (prepend apiSchemas = [\"PhysicsRigidBodyAPI\", \"PhysicsMassAPI\"])\n    {{\n        float physics:mass = 1\n    }}\n"
+        );
+    }
+    for i in 1..n {
+        s += &format!(
+            "    def PhysicsRevoluteJoint \"j{i}\"\n    {{\n        rel physics:body0 = </r/b{}>\n        rel physics:body1 = </r/b{i}>\n        float physics:lowerLimit = -90\n        float physics:upperLimit = 90\n    }}\n",
+            i - 1
+        );
+    }
+    s + "}\n"
+}
+
+struct OneFile(String);
+
+impl UsdLoader for OneFile {
+    fn load(&self, path: &str) -> Option<Vec<u8>> {
+        (path == "bench.usda").then(|| self.0.as_bytes().to_vec())
+    }
+}
+
+fn parse_usd_chain(c: &mut Criterion) {
+    let mut g = c.benchmark_group("parse_usd");
+    g.sample_size(10);
+    for n in SIZES {
+        let src = chain_usd(n);
+        g.throughput(Throughput::Bytes(src.len() as u64));
+        g.bench_with_input(BenchmarkId::from_parameter(n), &src, |b, src| {
+            b.iter(|| parse_usd("bench.usda", OneFile(src.clone())).unwrap())
+        });
+    }
+    g.finish();
+}
+
+fn usd_to_robot(c: &mut Criterion) {
+    let mut g = c.benchmark_group("usd_to_robot");
+    g.sample_size(10);
+    for n in SIZES {
+        let usd = parse_usd("bench.usda", OneFile(chain_usd(n))).unwrap();
+        g.throughput(Throughput::Elements(n as u64));
+        g.bench_with_input(BenchmarkId::from_parameter(n), &usd, |b, usd| {
+            b.iter(|| black_box(usd).to_robot().unwrap())
+        });
+    }
+    g.finish();
 }
 
 // Few samples: before the quadratic fixes the largest size takes seconds per iteration.
@@ -228,6 +280,8 @@ criterion_group!(
     parse_rich,
     parse_mjcf_chain,
     mjcf_to_robot,
+    parse_usd_chain,
+    usd_to_robot,
     lint_mjcf_all,
     lint_all,
     lint_rich,

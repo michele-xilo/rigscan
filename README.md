@@ -47,6 +47,8 @@ WebAssembly, and from Python.
   - `RS020` USD: a rigid body with no mass and no collision shape, so its mass cannot be computed (warning)
   - `RS021` USD: joints but no `PhysicsArticulationRootAPI` (warning)
   - `RS022` USD: a reference, payload or sublayer that could not be found
+
+  `RS004`-`RS007` do not run on USD: UsdPhysics joins bodies in a graph, so closed chains and free bodies are valid.
 - `parse_mjcf` reads MJCF into an element tree with line and column spans, splicing in `include`d files
   through a caller-supplied loader and applying `default` classes. `to_robot()` maps it onto the same model
   URDF uses, so the structural and physics rules run on it, and lists what the model cannot hold.
@@ -200,6 +202,15 @@ lints each model, meaning each file no other file includes. Only known upstream 
 ```bash
 scripts/fetch-mjcf-corpus.sh
 cargo test -p rigscan-core --test e2e_mjcf_corpus -- --nocapture
+```
+
+USD is tested on [newton-assets](https://github.com/newton-physics/newton-assets) (Apache-2.0): the script
+downloads its `.usd`, `.usda` and `.usdc` files (about 350 MB, no meshes or textures) at a pinned commit, and the
+test composes every stage and lints each one that no other file pulls in. Only known findings are allowed.
+
+```bash
+scripts/fetch-usd-corpus.sh
+cargo test --release -p rigscan-core --test e2e_usd_corpus -- --nocapture
 ```
 
 ## Contributing

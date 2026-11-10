@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use output::Scanned;
 use rayon::prelude::*;
 use rigscan_core::{
-    lint, lint_mjcf, lint_with, parse_mjcf, parse_urdf, parse_usd, Format, Severity,
+    lint_mjcf, lint_usd, lint_with, parse_mjcf, parse_urdf, parse_usd, Format, Severity,
 };
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -273,7 +273,7 @@ fn scan_file(path: &Path) -> Result<Scanned, String> {
             let loader = resolve::FsUsdLoader { read: read.clone() };
             let usd = parse_usd(&path.display().to_string(), loader).map_err(at)?;
             let robot = usd.to_robot().map_err(at)?;
-            let findings = lint(&robot);
+            let findings = lint_usd(&usd, &robot);
             let root = path.canonicalize().ok();
             let included = read
                 .borrow()

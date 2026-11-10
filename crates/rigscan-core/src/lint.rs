@@ -48,7 +48,8 @@ pub fn lint_with(robot: &Robot, resolver: &dyn Resolver) -> Vec<Finding> {
         }
     }
     // RS007: a robot without links has nothing to check, so every other rule passes vacuously.
-    if robot.links.is_empty() {
+    // A USD stage without rigid bodies is a prop or a garment, not a broken robot.
+    if robot.links.is_empty() && robot.format != Format::Usd {
         findings.push(critical(
             "RS007",
             "robot has no links".into(),
@@ -59,7 +60,10 @@ pub fn lint_with(robot: &Robot, resolver: &dyn Resolver) -> Vec<Finding> {
     duplicate_names(robot, &mut findings);
     crate::physics::physics(robot, &mut findings);
     crate::files::files(robot, resolver, &mut findings);
-    tree_shape(robot, &mut findings);
+    // UsdPhysics joins bodies in a graph: closed chains, loops and free bodies are all valid.
+    if robot.format != Format::Usd {
+        tree_shape(robot, &mut findings);
+    }
     findings
 }
 

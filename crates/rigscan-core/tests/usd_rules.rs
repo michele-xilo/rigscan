@@ -177,3 +177,41 @@ fn a_collider_outside_any_body_is_ignored() {
     ));
     assert!(f.is_empty(), "{f:?}");
 }
+
+#[test]
+fn a_closed_chain_is_not_reported() {
+    let f = scan(&chain(
+        r#"    def PhysicsRevoluteJoint "k"
+    {
+        rel physics:body0 = </r/a>
+        rel physics:body1 = </r/b>
+    }"#,
+    ));
+    assert!(only(&f, "RS004").is_empty(), "{f:?}");
+}
+
+#[test]
+fn a_loop_of_joints_is_not_reported() {
+    let f = scan(&chain(
+        r#"    def PhysicsRevoluteJoint "k"
+    {
+        rel physics:body0 = </r/b>
+        rel physics:body1 = </r/a>
+    }"#,
+    ));
+    assert!(only(&f, "RS005").is_empty(), "{f:?}");
+}
+
+#[test]
+fn a_free_body_is_not_a_second_root() {
+    let f = scan(&chain(
+        r#"    def Xform "free" (prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]) { float physics:mass = 1 }"#,
+    ));
+    assert!(only(&f, "RS006").is_empty(), "{f:?}");
+}
+
+#[test]
+fn a_stage_without_rigid_bodies_is_not_reported() {
+    let f = scan("#usda 1.0\ndef Xform \"prop\"\n{\n}\n");
+    assert!(f.is_empty(), "{f:?}");
+}

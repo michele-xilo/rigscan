@@ -164,12 +164,8 @@ pub fn write_full(out: &mut impl Write, path: &Path, s: &Scanned, color: bool) -
     for f in &s.findings {
         if f.span.is_none() {
             let head = format!("{}[{}]", severity(f.severity), f.rule);
-            writeln!(
-                out,
-                "{}: {}",
-                paint(color, severity_code(f.severity), &head),
-                f.message
-            )?;
+            let head = paint(color, severity_code(f.severity), &head);
+            writeln!(out, "{head}: {}", f.message)?;
             writeln!(out, "--> {}", path.display())?;
             writeln!(out)?;
             continue;

@@ -144,10 +144,10 @@ fn read(stage: &Stage) -> openusd::Result<Usd> {
         composition_errors: Vec::new(),
     };
     let mut targets = Vec::new();
-    for p in &paths {
-        let Ok(prim) = stage.prim(p.as_str()) else {
-            continue;
-        };
+    let prims = paths
+        .iter()
+        .filter_map(|p| Some((p, stage.prim(p.as_str()).ok()?)));
+    for (p, prim) in prims {
         prim_data(stage, &prim, p.as_str(), &mut usd, &mut targets)?;
     }
     // A joint may connect a prim that is not a rigid body, such as a ground collider; it is still
@@ -296,5 +296,61 @@ fn is_identity(v: &Value) -> bool {
         }
         Value::Quatd(q) => near(q.w, 1.0) && near(q.x, 0.0) && near(q.y, 0.0) && near(q.z, 0.0),
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use openusd::ar::Resolver;
+
+    struct Nothing;
+
+    impl UsdLoader for Nothing {
+        fn load(&self, _: &str) -> Option<Vec<u8>> {
+            None
+        }
+    }
+
+    fn resolver() -> LoaderResolver {
+        LoaderResolver {
+            loader: Box::new(Nothing),
+            found: RefCell::default(),
+        }
+    }
+
+    #[test]
+    fn identifiers_are_anchored_to_the_referencing_layer_unless_absolute() {
+        let r = resolver();
+        let anchor = ResolvedPath::new("a/b/root.usda");
+        assert_eq!(
+            r.create_identifier("./c/../x.usda", Some(&anchor)),
+            "a/b/x.usda"
+        );
+        assert_eq!(
+            r.create_identifier("/abs/x.usda", Some(&anchor)),
+            "/abs/x.usda"
+        );
+        assert_eq!(
+            r.create_identifier("http://h/x.usda", Some(&anchor)),
+            "http://h/x.usda"
+        );
+        assert_eq!(r.create_identifier("x.usda", None), "x.usda");
+    }
+
+    #[test]
+    fn missing_layer_does_not_resolve_or_open() {
+        let r = resolver();
+        assert!(r.resolve("gone.usda").is_none());
+        assert!(r.open_asset(&ResolvedPath::new("gone.usda")).is_err());
+    }
+
+    #[test]
+    fn the_file_system_is_never_consulted() {
+        let r = resolver();
+        assert!(r.resolve_for_new_asset("x.usda").is_some());
+        assert!(r
+            .get_modification_timestamp("x.usda", &ResolvedPath::new("/etc/hosts"))
+            .is_none());
     }
 }

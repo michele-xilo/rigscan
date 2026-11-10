@@ -393,3 +393,26 @@ def PhysicsJoint "free"
     assert_eq!(r.joints[0].kind, JointKind::Other("joint".into()));
     assert!(near(r.joints[0].origin.xyz[1], 2.0));
 }
+
+#[test]
+fn values_of_an_unexpected_type_are_ignored_or_listed() {
+    let r = robot(
+        r#"#usda 1.0
+def Xform "a" (prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"])
+{
+    string physics:mass = "heavy"
+    float physics:diagonalInertia = 1
+}
+def Xform "b" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {}
+def PhysicsFixedJoint "j"
+{
+    rel physics:body0 = </a>
+    rel physics:body1 = </b>
+    float physics:localRot0 = 1
+}
+"#,
+    );
+    assert!(r.links[0].inertial.is_none());
+    let what: Vec<&str> = r.unmapped.iter().map(|u| u.what.as_str()).collect();
+    assert_eq!(what, ["localRot0"]);
+}

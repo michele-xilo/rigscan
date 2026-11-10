@@ -177,3 +177,62 @@ fn mjcf_rules_run_in_the_cli() {
     assert!(out.contains("robot.xml:4:29: critical RS017"), "{out}");
     assert_eq!(o.status.code(), Some(1));
 }
+
+/// A model whose default class and body come from an include-only fragment.
+const SCENE: &str = "<mujoco>\n  <default><default class=\"arm\"><geom size=\"1\"/></default></default>\n  <worldbody>\n    <include file=\"frag.xml\"/>\n  </worldbody>\n</mujoco>";
+const FRAG: &str = "<mujoco><body name=\"a\" childclass=\"arm\"><geom/></body></mujoco>";
+
+#[test]
+fn directory_scan_skips_a_file_that_another_file_includes() {
+    let root = tree("frag", &[("scene.xml", SCENE), ("frag.xml", FRAG)]);
+    let out = run(&root, &["."]);
+    assert_eq!(stdout(&out), "");
+    assert_eq!(out.status.code(), Some(0), "{}", stderr(&out));
+}
+
+#[test]
+fn finding_in_an_included_file_is_reported_once_at_the_include() {
+    let root = tree(
+        "fragfinding",
+        &[
+            ("scene.xml", SCENE),
+            (
+                "frag.xml",
+                "<mujoco><body name=\"a\" childclass=\"arm\"><joint type=\"slide\" range=\"1 0\"/></body></mujoco>",
+            ),
+        ],
+    );
+    let out = run(&root, &["."]);
+    assert_eq!(
+        stdout(&out).lines().collect::<Vec<_>>(),
+        ["scene.xml:4:5: critical RS012: joint `joint0` lower limit 1 is above upper limit 0"],
+        "{}",
+        stdout(&out)
+    );
+}
+
+#[test]
+fn included_file_named_on_the_command_line_is_still_scanned() {
+    let root = tree("fragnamed", &[("scene.xml", SCENE), ("frag.xml", FRAG)]);
+    let out = run(&root, &[".", "frag.xml"]);
+    assert!(
+        stdout(&out).contains("frag.xml:1:9: critical RS016"),
+        "{}",
+        stdout(&out)
+    );
+}
+
+#[test]
+fn include_cycle_reports_both_files() {
+    let root = tree(
+        "cycle",
+        &[
+            ("a.xml", "<mujoco><include file=\"b.xml\"/></mujoco>"),
+            ("b.xml", "<mujoco><include file=\"a.xml\"/></mujoco>"),
+        ],
+    );
+    let out = run(&root, &["."]);
+    assert_eq!(out.status.code(), Some(2));
+    let err = stderr(&out);
+    assert!(err.contains("a.xml") && err.contains("b.xml"), "{err}");
+}

@@ -1,6 +1,7 @@
 //! Looks up mesh references on the file system, relative to the URDF being scanned.
 
 use rigscan_core::{IncludeLoader, Included, Resolution, Resolver};
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
 pub struct FsResolver {
@@ -54,13 +55,20 @@ impl Resolver for FsResolver {
 /// Reads `<include>`d MJCF files from disk.
 pub struct FsLoader {
     dir: PathBuf,
+    /// Every file read, so the caller knows which files are only parts of another.
+    read: RefCell<Vec<PathBuf>>,
 }
 
 impl FsLoader {
     pub fn for_file(file: &Path) -> Self {
         FsLoader {
             dir: file.parent().map(Path::to_path_buf).unwrap_or_default(),
+            read: RefCell::default(),
         }
+    }
+
+    pub fn into_read(self) -> Vec<PathBuf> {
+        self.read.into_inner()
     }
 }
 
@@ -73,6 +81,7 @@ impl IncludeLoader for FsLoader {
             .unwrap_or(&self.dir);
         let path = base.join(file);
         let text = std::fs::read_to_string(&path).ok()?;
+        self.read.borrow_mut().push(path.clone());
         Some(Included {
             path: path.display().to_string(),
             text,

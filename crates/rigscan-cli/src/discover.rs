@@ -2,10 +2,13 @@
 
 use crate::detect_format;
 use ignore::WalkBuilder;
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 pub struct Discovered {
     pub files: Vec<PathBuf>,
+    /// The files named on the command line, as opposed to found by walking a directory.
+    pub named: HashSet<PathBuf>,
     pub errors: Vec<String>,
 }
 
@@ -17,10 +20,12 @@ pub fn discover(args: &[PathBuf]) -> Discovered {
     let args = if args.is_empty() { &current } else { args };
     let mut found = Discovered {
         files: Vec::new(),
+        named: HashSet::new(),
         errors: Vec::new(),
     };
     for arg in args {
         if !arg.is_dir() {
+            found.named.insert(arg.clone());
             found.files.push(arg.clone());
             continue;
         }

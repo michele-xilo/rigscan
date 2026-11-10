@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use output::Scanned;
 use rayon::prelude::*;
 use rigscan_core::{lint_mjcf, lint_with, parse_mjcf, parse_urdf, Format, Severity};
+use std::collections::HashSet;
 use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -83,9 +84,11 @@ fn scan(
     if found.files.is_empty() {
         eprintln!("no supported files found");
     }
-    let files = &found.files;
     // Collected in input order, so a parallel run prints the same bytes as a serial one.
-    let results: Vec<Result<Scanned, String>> = files.par_iter().map(|p| scan_file(p)).collect();
+    let results: Vec<Result<Scanned, String>> =
+        found.files.par_iter().map(|p| scan_file(p)).collect();
+    let (files, results) = without_included(&found, results);
+    let files = &files;
     let failed = !found.errors.is_empty() || results.iter().any(Result::is_err);
     let critical = results
         .iter()
@@ -112,6 +115,41 @@ fn scan(
     } else {
         0
     })
+}
+
+/// Drops the results for files found by walking a directory that another file includes: alone they
+/// are fragments, not robots, and would report names only the including file defines. Only
+/// includes from files that scanned fine count, so a file that fails (an include cycle) never
+/// hides the files it includes.
+fn without_included(
+    found: &discover::Discovered,
+    results: Vec<Result<Scanned, String>>,
+) -> (Vec<PathBuf>, Vec<Result<Scanned, String>>) {
+    let included: HashSet<&Path> = results
+        .iter()
+        .flatten()
+        .flat_map(|s| s.included.iter().map(PathBuf::as_path))
+        .collect();
+    let is_fragment = |p: &PathBuf| {
+        !found.named.contains(p)
+            && p.canonicalize()
+                .is_ok_and(|c| included.contains(c.as_path()))
+    };
+    let keep: Vec<bool> = found.files.iter().map(|p| !is_fragment(p)).collect();
+    let files = found
+        .files
+        .iter()
+        .zip(&keep)
+        .filter(|(_, k)| **k)
+        .map(|(p, _)| p.clone())
+        .collect();
+    let results = results
+        .into_iter()
+        .zip(&keep)
+        .filter(|(_, k)| **k)
+        .map(|(r, _)| r)
+        .collect();
+    (files, results)
 }
 
 /// NO_COLOR (when non-empty) turns auto off, as does a dumb terminal; `always` ignores both.
@@ -204,17 +242,23 @@ fn scan_file(path: &Path) -> Result<Scanned, String> {
     let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let resolver = resolve::FsResolver::for_file(path);
     let at = |e: rigscan_core::ParseError| format!("{}: {}", path.display(), e.0);
-    let (robot, findings) = match format {
+    let (robot, findings, included) = match format {
         Format::Urdf => {
             let robot = parse_urdf(&src).map_err(at)?;
             let findings = lint_with(&robot, &resolver);
-            (robot, findings)
+            (robot, findings, Vec::new())
         }
         Format::Mjcf => {
-            let mjcf = parse_mjcf(&src, &resolve::FsLoader::for_file(path)).map_err(at)?;
+            let loader = resolve::FsLoader::for_file(path);
+            let mjcf = parse_mjcf(&src, &loader).map_err(at)?;
             let robot = mjcf.to_robot().map_err(at)?;
             let findings = lint_mjcf(&mjcf, &robot, &resolver);
-            (robot, findings)
+            let included = loader
+                .into_read()
+                .iter()
+                .filter_map(|p| p.canonicalize().ok())
+                .collect();
+            (robot, findings, included)
         }
     };
     Ok(Scanned {
@@ -222,6 +266,7 @@ fn scan_file(path: &Path) -> Result<Scanned, String> {
         robot,
         format,
         findings,
+        included,
     })
 }
 

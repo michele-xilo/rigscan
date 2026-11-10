@@ -6,13 +6,15 @@ use rigscan_core::{
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub struct Scanned {
     pub src: String,
     pub robot: Robot,
     pub format: Format,
     pub findings: Vec<Finding>,
+    /// Canonical paths of the files this one includes.
+    pub included: Vec<PathBuf>,
 }
 
 fn severity(s: Severity) -> &'static str {

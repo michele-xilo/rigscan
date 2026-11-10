@@ -56,7 +56,8 @@ cargo run -p rigscan-cli -- scan robot.urdf
 
 `rigscan scan` takes files and directories (default: the current directory).
 Directories are searched recursively for supported files (`.urdf`, and `.xml` files with a `<mujoco>` root),
-skipping anything in `.gitignore`; a file named on the command line is always
+skipping anything in `.gitignore` and any MJCF file that another scanned file
+`<include>`s (a fragment, not a robot on its own); a file named on the command line is always
 scanned. Files are scanned in parallel and the output is sorted, so it is the
 same on every run. Findings go to stdout and a summary (`Found 3 findings in
 2 files.` or `All checks passed!`) to stderr. It exits 0 when clean, 1 when there

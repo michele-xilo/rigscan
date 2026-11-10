@@ -324,3 +324,30 @@ fn inertial_origin_is_read() {
     let o = r.links[0].inertial.as_ref().unwrap().origin;
     assert_eq!((o.xyz, o.rpy), ([1.0, 2.0, 3.0], [0.1, 0.2, 0.3]));
 }
+
+#[test]
+fn inertial_origin_with_only_one_attribute_keeps_the_other_at_zero() {
+    let r = parse_urdf(
+        "<robot name=\"t\"><link name=\"a\"><inertial><origin xyz=\"1 2 3\"/></inertial></link><link name=\"b\"><inertial><origin rpy=\"0.1 0.2 0.3\"/></inertial></link></robot>",
+    )
+    .unwrap();
+    let a = r.links[0].inertial.as_ref().unwrap().origin;
+    let b = r.links[1].inertial.as_ref().unwrap().origin;
+    assert_eq!((a.xyz, a.rpy), ([1.0, 2.0, 3.0], [0.0; 3]));
+    assert_eq!((b.xyz, b.rpy), ([0.0; 3], [0.1, 0.2, 0.3]));
+}
+
+#[test]
+fn bad_numbers_in_axis_dynamics_and_inertial_origin_are_parse_errors() {
+    let bad = [
+        "<robot name=\"t\"><link name=\"a\"/><link name=\"b\"/><joint name=\"j\" type=\"revolute\"><parent link=\"a\"/><child link=\"b\"/><axis xyz=\"0 1\"/></joint></robot>",
+        "<robot name=\"t\"><link name=\"a\"/><link name=\"b\"/><joint name=\"j\" type=\"revolute\"><parent link=\"a\"/><child link=\"b\"/><dynamics damping=\"x\"/></joint></robot>",
+        "<robot name=\"t\"><link name=\"a\"/><link name=\"b\"/><joint name=\"j\" type=\"revolute\"><parent link=\"a\"/><child link=\"b\"/><dynamics friction=\"x\"/></joint></robot>",
+        "<robot name=\"t\"><link name=\"a\"><inertial><origin xyz=\"1 2\"/></inertial></link></robot>",
+        "<robot name=\"t\"><link name=\"a\"><inertial><origin rpy=\"1 2\"/></inertial></link></robot>",
+    ];
+    for src in bad {
+        let err = parse_urdf(src).unwrap_err().0;
+        assert!(err.starts_with("1:"), "{src}: {err}");
+    }
+}

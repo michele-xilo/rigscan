@@ -507,3 +507,31 @@ def Xform "r"
     );
     assert_eq!(r.links[0].inertial.as_ref().unwrap().origin.xyz, [0.0; 3]);
 }
+
+#[test]
+fn an_unknown_axis_token_falls_back_to_x() {
+    assert_eq!(
+        axis_robot("PhysicsRevoluteJoint", "uniform token physics:axis = \"W\"").joints[0].axis,
+        Some([1.0, 0.0, 0.0])
+    );
+}
+
+#[test]
+fn a_joint_can_connect_a_prim_that_is_not_a_rigid_body() {
+    let r = robot(
+        r#"#usda 1.0
+def Xform "r"
+{
+    def Xform "ground" {}
+    def Xform "a" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {}
+    def PhysicsFixedJoint "j"
+    {
+        rel physics:body0 = </r/ground>
+        rel physics:body1 = </r/a>
+    }
+}
+"#,
+    );
+    let ground = r.links.iter().find(|l| l.name == "/r/ground").unwrap();
+    assert_eq!(ground.inertial, None);
+}

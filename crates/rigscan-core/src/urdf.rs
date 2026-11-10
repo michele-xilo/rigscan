@@ -132,16 +132,16 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
                 }
             }
             (Some(Ctx::Joint), "axis") => {
+                let xyz = at(vec3(&e, "xyz"), &mut spans, start)?;
                 if let Some(j) = joint.as_mut() {
-                    j.axis = Some(at(vec3(&e, "xyz"), &mut spans, start)?.unwrap_or(DEFAULT_AXIS));
+                    j.axis = Some(xyz.unwrap_or(DEFAULT_AXIS));
                 }
             }
             (Some(Ctx::Joint), "dynamics") => {
+                let damping = at(number(&e, "damping"), &mut spans, start)?;
+                let friction = at(number(&e, "friction"), &mut spans, start)?;
                 if let Some(j) = joint.as_mut() {
-                    j.dynamics = Some(Dynamics {
-                        damping: at(number(&e, "damping"), &mut spans, start)?,
-                        friction: at(number(&e, "friction"), &mut spans, start)?,
-                    });
+                    j.dynamics = Some(Dynamics { damping, friction });
                 }
             }
             (Some(Ctx::Joint), "limit") => {

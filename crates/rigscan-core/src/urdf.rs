@@ -2,7 +2,7 @@
 
 use crate::model::{
     Format, Inertia, Inertial, Joint, JointKind, Limit, Link, MeshRef, Mimic, ParseError, Robot,
-    Span,
+    Span, Unmapped,
 };
 use quick_xml::events::BytesStart;
 use std::borrow::Cow;
@@ -140,6 +140,23 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
                         offset: at(number(&e, "offset"), &mut spans, start)?,
                     });
                 }
+            }
+            (Some(ctx @ (Ctx::Robot | Ctx::Link | Ctx::Joint | Ctx::Inertial)), _) => {
+                let owner = match ctx {
+                    Ctx::Link | Ctx::Inertial => robot.links.last().map(|l| l.name.clone()),
+                    Ctx::Joint => joint.as_ref().map(|j| j.name.clone()),
+                    _ => None,
+                };
+                let what = if ctx == Ctx::Inertial {
+                    format!("inertial/{name}")
+                } else {
+                    name.to_string()
+                };
+                robot.unmapped.push(Unmapped {
+                    what,
+                    name: owner,
+                    span: spans.at(start),
+                });
             }
             _ => {}
         }

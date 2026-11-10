@@ -86,3 +86,96 @@ fn unclosed_element_at_end_of_input_is_a_parse_error() {
 
     assert!(err.contains("unclosed"), "{err}");
 }
+
+fn lost(src: &str) -> Vec<(String, Option<String>, u32, u32)> {
+    parse_urdf(src)
+        .unwrap()
+        .unmapped
+        .into_iter()
+        .map(|u| (u.what, u.name, u.span.line, u.span.col))
+        .collect()
+}
+
+fn entry(
+    what: &str,
+    name: Option<&str>,
+    line: u32,
+    col: u32,
+) -> (String, Option<String>, u32, u32) {
+    (what.to_string(), name.map(str::to_string), line, col)
+}
+
+#[test]
+fn a_robot_of_mapped_elements_loses_nothing() {
+    let r = parse_urdf(
+        r#"<robot name="r">
+  <link name="a"><inertial><mass value="1"/><inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/></inertial></link>
+  <link name="b"/>
+  <joint name="j" type="revolute">
+    <parent link="a"/><child link="b"/><origin xyz="0 0 1"/><limit lower="0" upper="1" effort="1" velocity="1"/>
+  </joint>
+</robot>"#,
+    )
+    .unwrap();
+    assert!(r.unmapped.is_empty(), "{:?}", r.unmapped);
+}
+
+#[test]
+fn robot_level_elements_are_recorded_without_a_name() {
+    let got = lost(
+        "<robot name=\"r\">\n  <link name=\"a\"/>\n  <material name=\"m\"/>\n  <transmission name=\"t\"><joint name=\"a\"/></transmission>\n  <gazebo/>\n</robot>",
+    );
+    assert_eq!(
+        got,
+        [
+            entry("material", None, 3, 3),
+            entry("transmission", None, 4, 3),
+            entry("gazebo", None, 5, 3),
+        ]
+    );
+}
+
+#[test]
+fn link_visual_and_collision_are_recorded_under_the_link() {
+    let got = lost(
+        "<robot name=\"r\">\n  <link name=\"a\">\n    <visual><geometry><box size=\"1 1 1\"/></geometry></visual>\n    <collision><geometry><mesh filename=\"a.stl\"/></geometry></collision>\n  </link>\n</robot>",
+    );
+    assert_eq!(
+        got,
+        [
+            entry("visual", Some("a"), 3, 5),
+            entry("collision", Some("a"), 4, 5),
+        ]
+    );
+}
+
+#[test]
+fn joint_children_the_model_cannot_hold_are_recorded_under_the_joint() {
+    let got = lost(
+        "<robot name=\"r\">\n  <link name=\"a\"/><link name=\"b\"/>\n  <joint name=\"j\" type=\"revolute\">\n    <parent link=\"a\"/><child link=\"b\"/>\n    <axis xyz=\"0 0 1\"/>\n    <dynamics damping=\"1\"/>\n    <safety_controller/>\n  </joint>\n</robot>",
+    );
+    assert_eq!(
+        got,
+        [
+            entry("axis", Some("j"), 5, 5),
+            entry("dynamics", Some("j"), 6, 5),
+            entry("safety_controller", Some("j"), 7, 5),
+        ]
+    );
+}
+
+#[test]
+fn an_inertial_origin_is_recorded_under_the_link() {
+    let got = lost(
+        "<robot name=\"r\">\n  <link name=\"a\">\n    <inertial><origin xyz=\"0 0 1\"/><mass value=\"1\"/></inertial>\n  </link>\n</robot>",
+    );
+    assert_eq!(got, [entry("inertial/origin", Some("a"), 3, 15)]);
+}
+
+#[test]
+fn a_self_closing_joint_still_names_its_unmapped_children() {
+    let got = lost(
+        "<robot name=\"r\">\n  <link name=\"a\"/><link name=\"b\"/>\n  <joint name=\"j\" type=\"fixed\"><parent link=\"a\"/><child link=\"b\"/><axis/></joint>\n</robot>",
+    );
+    assert_eq!(got, [entry("axis", Some("j"), 3, 67)]);
+}

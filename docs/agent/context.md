@@ -136,7 +136,9 @@ CLI's `FsLoader` joins `file` to the directory of `from`. `Span` has no file, so
 also has an `anchor`: its own `span` in the main file, and the outermost `<include>` for anything read from an
 included file. The mapper uses the anchor, so a finding on an included element prints the scanned file's path and
 the include's line. `.xml` is taken as MJCF when the first 16 KiB contain `<mujoco`; a directory scan skips other
-`.xml` files (ROS launch files, `package.xml`).
+`.xml` files (ROS launch files, `package.xml`). A directory scan also drops a file that another scanned file includes: `FsLoader` records the files it read and
+`scan` removes those results afterwards, counting only includes from files that scanned without error. A file named on the
+command line is always scanned.
 
 ## Rule index
 

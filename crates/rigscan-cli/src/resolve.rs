@@ -1,8 +1,9 @@
 //! Looks up mesh references on the file system, relative to the URDF being scanned.
 
-use rigscan_core::{IncludeLoader, Included, Resolution, Resolver};
+use rigscan_core::{IncludeLoader, Included, Resolution, Resolver, UsdLoader};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 pub struct FsResolver {
     dir: PathBuf,
@@ -86,5 +87,19 @@ impl IncludeLoader for FsLoader {
             path: path.display().to_string(),
             text,
         })
+    }
+}
+
+/// Reads the layers of a USD stage from disk and remembers which, so the caller can tell which files
+/// are only parts of another.
+pub struct FsUsdLoader {
+    pub read: Rc<RefCell<Vec<PathBuf>>>,
+}
+
+impl UsdLoader for FsUsdLoader {
+    fn load(&self, path: &str) -> Option<Vec<u8>> {
+        let bytes = std::fs::read(path).ok()?;
+        self.read.borrow_mut().push(PathBuf::from(path));
+        Some(bytes)
     }
 }

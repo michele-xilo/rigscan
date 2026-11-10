@@ -10,8 +10,8 @@ Rigscan scans robot description files, reports what is wrong with them, and
 The core is written in Rust and is designed to run as a CLI, in the browser via
 WebAssembly, and from Python.
 
-> **Status: pre-alpha.** URDF and MJCF parsing, eighteen lint rules and a `scan`
-> command exist. There is no USD support, no conversion, and nothing is
+> **Status: pre-alpha.** URDF, MJCF and USD (UsdPhysics) reading, eighteen lint rules and a `scan`
+> command exist. There are no USD-specific rules, no conversion, and nothing is
 > published yet. The API will change.
 
 ## What works today
@@ -47,6 +47,10 @@ WebAssembly, and from Python.
   through a caller-supplied loader and applying `default` classes. `to_robot()` maps it onto the same model
   URDF uses, so the structural and physics rules run on it, and lists what the model cannot hold.
   `lint_mjcf` runs those rules plus RS016-RS018, and `rigscan scan` reads MJCF files too.
+- `parse_usd` opens a USD stage (`.usda` or `.usdc`), composing references, payloads and sublayers through a
+  caller-supplied loader, and `to_robot()` maps the UsdPhysics rigid bodies and joints onto the same model, so
+  the shared rules run on it. USD has no source positions, so findings name the file only (JSON `line` and
+  `column` are `null`). `rigscan scan` reads `.usda`, `.usdc` and `.usd` files.
 - `rigscan-core` compiles for `wasm32-unknown-unknown`.
 
 ```bash
@@ -55,9 +59,9 @@ cargo run -p rigscan-cli -- scan robot.urdf
 ```
 
 `rigscan scan` takes files and directories (default: the current directory).
-Directories are searched recursively for supported files (`.urdf`, and `.xml` files with a `<mujoco>` root),
-skipping anything in `.gitignore` and any MJCF file that another scanned file
-`<include>`s (a fragment, not a robot on its own); a file named on the command line is always
+Directories are searched recursively for supported files (`.urdf`, `.usd`, `.usda`, `.usdc`, and `.xml` files with a `<mujoco>` root),
+skipping anything in `.gitignore` and any MJCF or USD file that another scanned file
+includes or references (a fragment, not a robot on its own); a file named on the command line is always
 scanned. Files are scanned in parallel and the output is sorted, so it is the
 same on every run. Findings go to stdout and a summary (`Found 3 findings in
 2 files.` or `All checks passed!`) to stderr. It exits 0 when clean, 1 when there

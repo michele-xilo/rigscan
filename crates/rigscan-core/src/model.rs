@@ -1,10 +1,19 @@
 //! Format-neutral robot model shared by every parser and rule.
 
-/// 1-based line and column in the source text.
+/// 1-based line and column in the source text; line 0 means the position is unknown ([`Span::NONE`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     pub line: u32,
     pub col: u32,
+}
+
+impl Span {
+    /// Where nothing is known: USD has no source positions for its elements.
+    pub const NONE: Span = Span { line: 0, col: 0 };
+
+    pub fn is_none(&self) -> bool {
+        *self == Span::NONE
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -99,6 +108,7 @@ pub struct Mimic {
 pub enum Format {
     Urdf,
     Mjcf,
+    Usd,
 }
 
 /// A robot description, independent of the format it was read from.

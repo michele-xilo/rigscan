@@ -1,7 +1,7 @@
 //! Rendering of scan results: findings only, per-element report, or JSON.
 
 use rigscan_core::{
-    report, Element, ElementStatus, Finding, Format, Report, Robot, Severity, Status, Verdict,
+    report, Element, ElementStatus, Finding, Format, Report, Robot, Severity, Span, Status, Verdict,
 };
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -36,6 +36,7 @@ fn format_name(f: Format) -> &'static str {
     match f {
         Format::Urdf => "urdf",
         Format::Mjcf => "mjcf",
+        Format::Usd => "usd",
     }
 }
 
@@ -90,13 +91,29 @@ pub fn problem(color: bool, text: &str) -> String {
     paint(color, RED, text)
 }
 
+/// `path:line:col`, or just the path when the format has no source positions.
+fn location(path: &Path, span: Span) -> String {
+    if span.is_none() {
+        path.display().to_string()
+    } else {
+        format!("{}:{}:{}", path.display(), span.line, span.col)
+    }
+}
+
+/// JSON `null` for a position that is not known.
+fn position(span: Span) -> (Value, Value) {
+    if span.is_none() {
+        (Value::Null, Value::Null)
+    } else {
+        (json!(span.line), json!(span.col))
+    }
+}
+
 pub fn format_finding(path: &Path, f: &Finding, color: bool) -> String {
     let word = severity(f.severity);
     format!(
-        "{}:{}:{}: {} {}: {}",
-        path.display(),
-        f.span.line,
-        f.span.col,
+        "{}: {} {}: {}",
+        location(path, f.span),
         paint(color, severity_code(f.severity), word),
         f.rule,
         f.message
@@ -145,6 +162,18 @@ pub fn write_full(out: &mut impl Write, path: &Path, s: &Scanned, color: bool) -
     }
     let starts = line_starts(&s.src);
     for f in &s.findings {
+        if f.span.is_none() {
+            let head = format!("{}[{}]", severity(f.severity), f.rule);
+            writeln!(
+                out,
+                "{}: {}",
+                paint(color, severity_code(f.severity), &head),
+                f.message
+            )?;
+            writeln!(out, "--> {}", path.display())?;
+            writeln!(out)?;
+            continue;
+        }
         let text = line_text(&s.src, &starts, f.span.line);
         let pad = " ".repeat(f.span.line.to_string().len());
         let code = severity_code(f.severity);
@@ -211,22 +240,24 @@ pub fn write_report(out: &mut impl Write, path: &Path, s: &Scanned, color: bool)
 }
 
 fn element_json(e: &ElementStatus) -> Value {
+    let (line, column) = position(e.span);
     json!({
         "kind": kind(e.element),
         "name": e.name,
         "status": status(e.status),
-        "line": e.span.line,
-        "column": e.span.col,
+        "line": line,
+        "column": column,
     })
 }
 
 fn finding_json(robot: &Robot, f: &Finding) -> Value {
+    let (line, column) = position(f.span);
     json!({
         "rule": f.rule,
         "severity": severity(f.severity),
         "message": f.message,
-        "line": f.span.line,
-        "column": f.span.col,
+        "line": line,
+        "column": column,
         "element": { "kind": kind(f.element), "name": element_name(robot, f.element) },
     })
 }

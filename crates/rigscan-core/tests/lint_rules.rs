@@ -188,6 +188,8 @@ fn two_joints_same_parent(format: rigscan_core::Format) -> Vec<&'static str> {
         origin: Origin::default(),
         limit: None,
         mimic: None,
+        axis: None,
+        dynamics: None,
         span,
     };
     let mut r = Robot::new(format);
@@ -224,6 +226,8 @@ fn rs004_flags_a_body_reached_from_two_parents_in_mjcf() {
         origin: Origin::default(),
         limit: None,
         mimic: None,
+        axis: None,
+        dynamics: None,
         span,
     };
     let mut r = Robot::new(Format::Mjcf);

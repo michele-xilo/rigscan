@@ -371,3 +371,53 @@ fn elements_from_an_included_file_are_reported_at_the_include() {
     assert_eq!(r.links[1].span, at);
     assert_eq!(r.joints[0].span, at);
 }
+
+#[test]
+fn hinge_and_slide_axis_default_to_z() {
+    let r = robot(
+        "<mujoco><worldbody><body name=\"a\"><joint name=\"h\"/><body name=\"b\"><joint name=\"s\" type=\"slide\"/></body></body></worldbody></mujoco>",
+    );
+    assert_eq!(r.joints[0].axis, Some([0.0, 0.0, 1.0]));
+    assert_eq!(r.joints[1].axis, Some([0.0, 0.0, 1.0]));
+}
+
+#[test]
+fn authored_and_default_class_axis_is_kept() {
+    let r = robot(
+        "<mujoco><default><joint axis=\"1 0 0\"/></default><worldbody><body name=\"a\"><joint name=\"h\"/><body name=\"b\"><joint name=\"s\" axis=\"0 1 0\"/></body></body></worldbody></mujoco>",
+    );
+    assert_eq!(r.joints[0].axis, Some([1.0, 0.0, 0.0]));
+    assert_eq!(r.joints[1].axis, Some([0.0, 1.0, 0.0]));
+}
+
+#[test]
+fn free_and_fixed_joints_have_no_axis() {
+    let r = robot(
+        "<mujoco><worldbody><body name=\"a\"><freejoint/></body><body name=\"b\"/></worldbody></mujoco>",
+    );
+    assert_eq!(r.joints[0].axis, None);
+    assert_eq!(r.joints[1].axis, None);
+}
+
+#[test]
+fn damping_and_frictionloss_become_dynamics() {
+    let r = robot(
+        "<mujoco><worldbody><body name=\"a\"><joint name=\"h\" damping=\"0.5\" frictionloss=\"0.1\"/><body name=\"b\"><joint name=\"s\" damping=\"2\"/></body><body name=\"c\"><joint name=\"t\"/></body></body></worldbody></mujoco>",
+    );
+    let d = r.joints[0].dynamics.clone().unwrap();
+    assert_eq!((d.damping, d.friction), (Some(0.5), Some(0.1)));
+    let d = r.joints[1].dynamics.clone().unwrap();
+    assert_eq!((d.damping, d.friction), (Some(2.0), None));
+    assert_eq!(r.joints[2].dynamics, None);
+}
+
+#[test]
+fn inertial_pos_is_the_centre_of_mass() {
+    let r = robot(
+        "<mujoco><worldbody><body name=\"a\"><inertial pos=\"1 2 3\" mass=\"1\" diaginertia=\"1 1 1\"/></body></worldbody></mujoco>",
+    );
+    assert_eq!(
+        r.links[1].inertial.as_ref().unwrap().origin.xyz,
+        [1.0, 2.0, 3.0]
+    );
+}

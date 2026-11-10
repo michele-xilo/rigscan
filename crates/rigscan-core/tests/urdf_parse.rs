@@ -152,30 +152,30 @@ fn link_visual_and_collision_are_recorded_under_the_link() {
 #[test]
 fn joint_children_the_model_cannot_hold_are_recorded_under_the_joint() {
     let got = lost(
-        "<robot name=\"r\">\n  <link name=\"a\"/><link name=\"b\"/>\n  <joint name=\"j\" type=\"revolute\">\n    <parent link=\"a\"/><child link=\"b\"/>\n    <axis xyz=\"0 0 1\"/>\n    <dynamics damping=\"1\"/>\n    <safety_controller/>\n  </joint>\n</robot>",
+        "<robot name=\"r\">\n  <link name=\"a\"/><link name=\"b\"/>\n  <joint name=\"j\" type=\"revolute\">\n    <parent link=\"a\"/><child link=\"b\"/>\n    <calibration/>\n    <safety_controller/>\n    <vendor_tag/>\n  </joint>\n</robot>",
     );
     assert_eq!(
         got,
         [
-            entry("axis", Some("j"), 5, 5),
-            entry("dynamics", Some("j"), 6, 5),
-            entry("safety_controller", Some("j"), 7, 5),
+            entry("calibration", Some("j"), 5, 5),
+            entry("safety_controller", Some("j"), 6, 5),
+            entry("vendor_tag", Some("j"), 7, 5),
         ]
     );
 }
 
 #[test]
-fn an_inertial_origin_is_recorded_under_the_link() {
+fn an_unknown_inertial_child_is_recorded_under_the_link() {
     let got = lost(
-        "<robot name=\"r\">\n  <link name=\"a\">\n    <inertial><origin xyz=\"0 0 1\"/><mass value=\"1\"/></inertial>\n  </link>\n</robot>",
+        "<robot name=\"r\">\n  <link name=\"a\">\n    <inertial><vendor_tag/><mass value=\"1\"/></inertial>\n  </link>\n</robot>",
     );
-    assert_eq!(got, [entry("inertial/origin", Some("a"), 3, 15)]);
+    assert_eq!(got, [entry("inertial/vendor_tag", Some("a"), 3, 15)]);
 }
 
 #[test]
 fn a_self_closing_joint_still_names_its_unmapped_children() {
     let got = lost(
-        "<robot name=\"r\">\n  <link name=\"a\"/><link name=\"b\"/>\n  <joint name=\"j\" type=\"fixed\"><parent link=\"a\"/><child link=\"b\"/><axis/></joint>\n</robot>",
+        "<robot name=\"r\">\n  <link name=\"a\"/><link name=\"b\"/>\n  <joint name=\"j\" type=\"fixed\"><parent link=\"a\"/><child link=\"b\"/><calibration/></joint>\n</robot>",
     );
-    assert_eq!(got, [entry("axis", Some("j"), 3, 67)]);
+    assert_eq!(got, [entry("calibration", Some("j"), 3, 67)]);
 }

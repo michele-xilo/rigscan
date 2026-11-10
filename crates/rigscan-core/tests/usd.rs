@@ -416,3 +416,94 @@ def PhysicsFixedJoint "j"
     let what: Vec<&str> = r.unmapped.iter().map(|u| u.what.as_str()).collect();
     assert_eq!(what, ["localRot0"]);
 }
+
+fn axis_robot(joint: &str, extra: &str) -> Robot {
+    robot(&format!(
+        r#"#usda 1.0
+def Xform "r"
+{{
+    def Xform "a" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {{}}
+    def Xform "b" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {{}}
+    def {joint} "j"
+    {{
+        rel physics:body0 = </r/a>
+        rel physics:body1 = </r/b>
+        {extra}
+    }}
+}}
+"#
+    ))
+}
+
+#[test]
+fn joint_axis_defaults_to_x_and_follows_the_token() {
+    assert_eq!(
+        axis_robot("PhysicsRevoluteJoint", "").joints[0].axis,
+        Some([1.0, 0.0, 0.0])
+    );
+    assert_eq!(
+        axis_robot(
+            "PhysicsPrismaticJoint",
+            "uniform token physics:axis = \"Y\""
+        )
+        .joints[0]
+            .axis,
+        Some([0.0, 1.0, 0.0])
+    );
+    assert_eq!(
+        axis_robot("PhysicsRevoluteJoint", "uniform token physics:axis = \"Z\"").joints[0].axis,
+        Some([0.0, 0.0, 1.0])
+    );
+}
+
+#[test]
+fn fixed_and_generic_usd_joints_have_no_axis() {
+    assert_eq!(axis_robot("PhysicsFixedJoint", "").joints[0].axis, None);
+    assert_eq!(axis_robot("PhysicsJoint", "").joints[0].axis, None);
+}
+
+#[test]
+fn center_of_mass_is_the_inertial_origin() {
+    let r = robot(
+        r#"#usda 1.0
+def Xform "r"
+{
+    def Xform "a" (prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"])
+    {
+        float physics:mass = 1
+        point3f physics:centerOfMass = (0.1, 0.2, 0.3)
+    }
+}
+"#,
+    );
+    let o = r.links[0].inertial.as_ref().unwrap().origin;
+    assert!(
+        near(o.xyz[0], 0.1) && near(o.xyz[1], 0.2) && near(o.xyz[2], 0.3),
+        "{o:?}"
+    );
+}
+
+#[test]
+fn usd_joints_have_no_dynamics() {
+    assert_eq!(
+        axis_robot("PhysicsRevoluteJoint", "").joints[0].dynamics,
+        None
+    );
+}
+
+#[test]
+fn an_unauthored_center_of_mass_is_the_body_origin() {
+    let r = robot(
+        r#"#usda 1.0
+def Xform "r"
+{
+    def Xform "a" (prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"])
+    {
+        float physics:mass = 1
+        point3f physics:centerOfMass = (-inf, -inf, -inf)
+    }
+}
+"#,
+    );
+    assert_eq!(r.links[0].inertial.as_ref().unwrap().origin.xyz, [0.0; 3]);
+}

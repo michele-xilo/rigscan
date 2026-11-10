@@ -23,6 +23,8 @@ pub struct UsdBody {
     pub rigid: bool,
     pub mass: Option<f64>,
     pub inertia: Option<[f64; 3]>,
+    /// Centre of mass in the body frame; `None` when USD is left to compute it from the shapes.
+    pub center_of_mass: Option<[f64; 3]>,
     /// A prim with `PhysicsCollisionAPI` is this prim or under it, with no rigid body in between.
     pub collision: bool,
 }
@@ -36,6 +38,8 @@ pub struct UsdJoint {
     pub body0: Option<String>,
     pub body1: Option<String>,
     pub local_pos0: [f64; 3],
+    /// Unit vector of `physics:axis` (`X`, `Y` or `Z`, default `X`); only revolute and prismatic joints use it.
+    pub axis: [f64; 3],
     /// As authored: degrees for a revolute joint, stage units for a prismatic one.
     pub lower: Option<f64>,
     pub upper: Option<f64>,
@@ -169,6 +173,7 @@ fn read(stage: &Stage) -> openusd::Result<Usd> {
                 rigid: false,
                 mass: None,
                 inertia: None,
+                center_of_mass: None,
                 collision: false,
             });
         }
@@ -221,22 +226,27 @@ fn prim_data(
     let attr = |n: &str| prim.attribute(n).get::<Value>().ok().flatten();
 
     if has("PhysicsRigidBodyAPI") {
-        let (mass, inertia) = if has("PhysicsMassAPI") {
+        let (mass, inertia, center_of_mass) = if has("PhysicsMassAPI") {
             (
                 attr("physics:mass").and_then(number).filter(|m| *m > 0.0),
                 // Zero means "compute from the shapes", which is not a known value.
                 attr("physics:diagonalInertia")
                     .and_then(vec3)
                     .filter(|v| v.iter().any(|x| *x > 0.0)),
+                // The default is (-inf, -inf, -inf), meaning "compute from the shapes".
+                attr("physics:centerOfMass")
+                    .and_then(vec3)
+                    .filter(|v| v.iter().all(|x| x.is_finite())),
             )
         } else {
-            (None, None)
+            (None, None, None)
         };
         usd.bodies.push(UsdBody {
             path: path.to_string(),
             rigid: true,
             mass,
             inertia,
+            center_of_mass,
             collision: false,
         });
     }
@@ -263,6 +273,9 @@ fn prim_data(
             body0,
             body1,
             local_pos0: attr("physics:localPos0").and_then(vec3).unwrap_or([0.0; 3]),
+            axis: attr("physics:axis")
+                .and_then(axis)
+                .unwrap_or([1.0, 0.0, 0.0]),
             lower: attr("physics:lowerLimit")
                 .and_then(number)
                 .filter(|v| v.is_finite()),
@@ -310,6 +323,16 @@ fn number(v: Value) -> Option<f64> {
     match v {
         Value::Float(x) => Some(f64::from(x)),
         Value::Double(x) => Some(x),
+        _ => None,
+    }
+}
+
+fn axis(v: Value) -> Option<[f64; 3]> {
+    let Value::Token(t) = v else { return None };
+    match t.as_str() {
+        "X" => Some([1.0, 0.0, 0.0]),
+        "Y" => Some([0.0, 1.0, 0.0]),
+        "Z" => Some([0.0, 0.0, 1.0]),
         _ => None,
     }
 }

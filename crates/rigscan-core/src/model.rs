@@ -38,6 +38,8 @@ pub struct MeshRef {
 pub struct Inertial {
     pub mass: Option<f64>,
     pub inertia: Option<Inertia>,
+    /// Centre of mass relative to the link frame.
+    pub origin: Origin,
     pub span: Span,
 }
 
@@ -61,7 +63,20 @@ pub struct Joint {
     pub origin: Origin,
     pub limit: Option<Limit>,
     pub mimic: Option<Mimic>,
+    /// Axis in the joint frame, as authored and not normalized. Set for revolute, continuous and
+    /// prismatic joints (the format's default when none is authored); `None` for fixed and
+    /// floating joints, and for other types unless authored.
+    pub axis: Option<[f64; 3]>,
+    pub dynamics: Option<Dynamics>,
     pub span: Span,
+}
+
+/// Passive joint dynamics. Every field is optional so a conversion can tell a missing value from
+/// a zero.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Dynamics {
+    pub damping: Option<f64>,
+    pub friction: Option<f64>,
 }
 
 /// A joint's `type` attribute. A misspelled or missing type is kept as

@@ -78,9 +78,13 @@ robot element is listed only when it has a finding. The CLI renders `text`, `ful
 `ignore` crate (`.gitignore` honoured even outside a git repository), scans in parallel with rayon and collects
 in input order so output is deterministic. The summary line is on stderr to keep stdout equal to the findings.
 
-- `Link { name, inertial, meshes, span }`: `Inertial { mass: Option, inertia: Option<Inertia> }`,
+- `Link { name, inertial, meshes, span }`: `Inertial { mass: Option, inertia: Option<Inertia>, origin }` (`origin` is the
+  centre of mass: URDF `inertial/origin`, MJCF inertial `pos`, USD `centerOfMass`; rotations are not read yet),
   `MeshRef { filename, span }` from `<visual>` and `<collision>` geometry (#5).
-- `Joint { name, parent, child, kind, origin, limit, mimic, span }`:
+- `Joint { name, parent, child, kind, origin, limit, mimic, axis, dynamics, span }`: `axis` is the resolved axis as
+  authored, not normalized (URDF default x, MJCF hinge/slide default z, USD token X/Y/Z default x), set for revolute,
+  continuous and prismatic joints and `None` for fixed and floating; `dynamics` is damping and friction (URDF
+  `dynamics`, MJCF `damping` and `frictionloss`; USD drives stay unmapped);
   `JointKind` keeps an unknown or missing `type` as `Other(String)` so a rule
   can report it; `Origin` defaults to zero; `Limit` and `Mimic` fields are
   `Option` so a rule can tell missing from zero (#5).
@@ -88,8 +92,7 @@ in input order so output is deterministic. The summary line is on stderr to keep
   attribute (`inertia` fields, `mesh filename`) is a `ParseError` prefixed with
   `line:col:`. A scan stops at the first one. If users want all problems
   reported at once, make these findings instead.
-- Not yet: geoms with primitives, actuators, axis, link origins (#11, viewer),
-  USD data (#15).
+- Not yet: geoms with primitives and link geometry, actuators, rotations (MJCF orientation, USD `localRot`), `metersPerUnit`.
 
 Known risk for #11: an MJCF body can have several joints to its parent, or
 none. The model has one parent/child edge per joint, so RS004 would flag
@@ -126,8 +129,7 @@ tendons, equality constraints, contacts, sensors, keyframes, primitive geoms, bo
 `axisangle`, `xyaxes`, `zaxis`; rotation is not converted, so `rpy` stays zero) and anything inside `frame`,
 `replicate`, `attach`, `composite` or `flexcomp`, which are not expanded.
 The URDF reader fills it too: each direct child of `<robot>`, `<link>`, `<joint>` or `<inertial>` that it does not read
-(`material`, `transmission`, `gazebo`, `visual`, `collision`, `axis`, `dynamics`, `safety_controller`, `calibration`,
-`inertial/origin`, unknown tags). A `visual` or `collision` is one entry; its geometry is not listed separately.
+(`material`, `transmission`, `gazebo`, `visual`, `collision`, `safety_controller`, `calibration`, unknown tags). A `visual` or `collision` is one entry; its geometry is not listed separately.
 
 RS004 accepts several joints between the same two links for MJCF and still flags a link reached from two different
 parents. RS013 applies to URDF only: MJCF joints may be unlimited and have no effort or velocity.

@@ -2,8 +2,8 @@
 
 use crate::mjcf::{Mjcf, MjcfNode};
 use crate::model::{
-    Format, Inertia, Inertial, Joint, JointKind, Limit, Link, MeshRef, Origin, ParseError, Robot,
-    Unmapped,
+    Dynamics, Format, Inertia, Inertial, Joint, JointKind, Limit, Link, MeshRef, Origin,
+    ParseError, Robot, Unmapped,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -180,6 +180,8 @@ impl Mapper {
                 origin,
                 limit: None,
                 mimic: None,
+                axis: None,
+                dynamics: None,
                 span: node.anchor,
             });
         }
@@ -215,6 +217,16 @@ impl Mapper {
             "free" => JointKind::Floating,
             other => JointKind::Other(other.to_string()),
         };
+        let axis = match ty {
+            "hinge" | "slide" => {
+                Some(numbers(node, "axis", 3)?.map_or([0.0, 0.0, 1.0], |v| [v[0], v[1], v[2]]))
+            }
+            _ => None,
+        };
+        let damping = numbers(node, "damping", 1)?.map(|v| v[0]);
+        let friction = numbers(node, "frictionloss", 1)?.map(|v| v[0]);
+        let dynamics =
+            (damping.is_some() || friction.is_some()).then_some(Dynamics { damping, friction });
         let name = match node.attr("name") {
             Some(n) => n.to_string(),
             None => unique(
@@ -235,6 +247,8 @@ impl Mapper {
                 velocity: None,
             }),
             mimic: None,
+            axis,
+            dynamics,
             span: node.anchor,
         })
     }
@@ -331,6 +345,10 @@ fn inertial(node: &MjcfNode) -> Result<Inertial, ParseError> {
     Ok(Inertial {
         mass,
         inertia,
+        origin: Origin {
+            xyz: numbers(node, "pos", 3)?.map_or([0.0; 3], |v| [v[0], v[1], v[2]]),
+            ..Origin::default()
+        },
         span: node.anchor,
     })
 }

@@ -178,6 +178,7 @@ fn inertial_reads_mass_and_inertia() {
                 iyz: 0.3,
                 izz: 3.0,
             }),
+            origin: Default::default(),
             span: Span { line: 1, col: 32 },
         })
     );
@@ -263,4 +264,63 @@ fn non_finite_numbers_are_rejected() {
 
         assert!(err.contains("invalid number") && err.contains(v), "{err}");
     }
+}
+
+#[test]
+fn revolute_joint_without_axis_gets_the_urdf_default() {
+    assert_eq!(
+        joint_with("type=\"revolute\"", "").axis,
+        Some([1.0, 0.0, 0.0])
+    );
+    assert_eq!(
+        joint_with("type=\"continuous\"", "").axis,
+        Some([1.0, 0.0, 0.0])
+    );
+    assert_eq!(
+        joint_with("type=\"prismatic\"", "").axis,
+        Some([1.0, 0.0, 0.0])
+    );
+}
+
+#[test]
+fn authored_axis_is_kept_as_written() {
+    let j = joint_with("type=\"revolute\"", "<axis xyz=\"0 2 0\"/>");
+    assert_eq!(j.axis, Some([0.0, 2.0, 0.0]));
+}
+
+#[test]
+fn fixed_and_floating_joints_have_no_axis() {
+    assert_eq!(
+        joint_with("type=\"fixed\"", "<axis xyz=\"0 0 1\"/>").axis,
+        None
+    );
+    assert_eq!(joint_with("type=\"floating\"", "").axis, None);
+}
+
+#[test]
+fn joint_dynamics_are_read() {
+    let j = joint_with(
+        "type=\"revolute\"",
+        "<dynamics damping=\"0.5\" friction=\"0.1\"/>",
+    );
+    let d = j.dynamics.unwrap();
+    assert_eq!((d.damping, d.friction), (Some(0.5), Some(0.1)));
+}
+
+#[test]
+fn a_missing_dynamics_value_stays_none() {
+    let j = joint_with("type=\"revolute\"", "<dynamics damping=\"0.5\"/>");
+    let d = j.dynamics.unwrap();
+    assert_eq!((d.damping, d.friction), (Some(0.5), None));
+    assert_eq!(joint_with("type=\"revolute\"", "").dynamics, None);
+}
+
+#[test]
+fn inertial_origin_is_read() {
+    let r = parse_urdf(
+        "<robot name=\"t\"><link name=\"a\"><inertial><origin xyz=\"1 2 3\" rpy=\"0.1 0.2 0.3\"/><mass value=\"1\"/></inertial></link></robot>",
+    )
+    .unwrap();
+    let o = r.links[0].inertial.as_ref().unwrap().origin;
+    assert_eq!((o.xyz, o.rpy), ([1.0, 2.0, 3.0], [0.1, 0.2, 0.3]));
 }

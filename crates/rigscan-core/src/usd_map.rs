@@ -34,6 +34,10 @@ impl Usd {
                     ixz: 0.0,
                     iyz: 0.0,
                 }),
+                origin: Origin {
+                    xyz: b.center_of_mass.unwrap_or([0.0; 3]),
+                    ..Origin::default()
+                },
                 span: Span::NONE,
             });
             robot.links.push(link(&b.path, inertial));
@@ -70,6 +74,11 @@ fn joint(j: &crate::usd::UsdJoint) -> Joint {
         "PhysicsFixedJoint" => JointKind::Fixed,
         other => JointKind::Other(other_name(other)),
     };
+    let axis = matches!(
+        kind,
+        JointKind::Revolute | JointKind::Continuous | JointKind::Prismatic
+    )
+    .then_some(j.axis);
     let limit =
         (limited && matches!(kind, JointKind::Revolute | JointKind::Prismatic)).then(|| Limit {
             lower: j.lower.map(|v| v * scale),
@@ -88,6 +97,8 @@ fn joint(j: &crate::usd::UsdJoint) -> Joint {
         },
         limit,
         mimic: None,
+        axis,
+        dynamics: None,
         span: Span::NONE,
     }
 }

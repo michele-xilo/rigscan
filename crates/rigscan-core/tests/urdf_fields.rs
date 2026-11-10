@@ -178,6 +178,7 @@ fn inertial_reads_mass_and_inertia() {
                 iyz: 0.3,
                 izz: 3.0,
             }),
+            origin: Default::default(),
             span: Span { line: 1, col: 32 },
         })
     );
@@ -262,5 +263,91 @@ fn non_finite_numbers_are_rejected() {
         let err = parse_urdf(&src).unwrap_err().0;
 
         assert!(err.contains("invalid number") && err.contains(v), "{err}");
+    }
+}
+
+#[test]
+fn revolute_joint_without_axis_gets_the_urdf_default() {
+    assert_eq!(
+        joint_with("type=\"revolute\"", "").axis,
+        Some([1.0, 0.0, 0.0])
+    );
+    assert_eq!(
+        joint_with("type=\"continuous\"", "").axis,
+        Some([1.0, 0.0, 0.0])
+    );
+    assert_eq!(
+        joint_with("type=\"prismatic\"", "").axis,
+        Some([1.0, 0.0, 0.0])
+    );
+}
+
+#[test]
+fn authored_axis_is_kept_as_written() {
+    let j = joint_with("type=\"revolute\"", "<axis xyz=\"0 2 0\"/>");
+    assert_eq!(j.axis, Some([0.0, 2.0, 0.0]));
+}
+
+#[test]
+fn fixed_and_floating_joints_have_no_axis() {
+    assert_eq!(
+        joint_with("type=\"fixed\"", "<axis xyz=\"0 0 1\"/>").axis,
+        None
+    );
+    assert_eq!(joint_with("type=\"floating\"", "").axis, None);
+}
+
+#[test]
+fn joint_dynamics_are_read() {
+    let j = joint_with(
+        "type=\"revolute\"",
+        "<dynamics damping=\"0.5\" friction=\"0.1\"/>",
+    );
+    let d = j.dynamics.unwrap();
+    assert_eq!((d.damping, d.friction), (Some(0.5), Some(0.1)));
+}
+
+#[test]
+fn a_missing_dynamics_value_stays_none() {
+    let j = joint_with("type=\"revolute\"", "<dynamics damping=\"0.5\"/>");
+    let d = j.dynamics.unwrap();
+    assert_eq!((d.damping, d.friction), (Some(0.5), None));
+    assert_eq!(joint_with("type=\"revolute\"", "").dynamics, None);
+}
+
+#[test]
+fn inertial_origin_is_read() {
+    let r = parse_urdf(
+        "<robot name=\"t\"><link name=\"a\"><inertial><origin xyz=\"1 2 3\" rpy=\"0.1 0.2 0.3\"/><mass value=\"1\"/></inertial></link></robot>",
+    )
+    .unwrap();
+    let o = r.links[0].inertial.as_ref().unwrap().origin;
+    assert_eq!((o.xyz, o.rpy), ([1.0, 2.0, 3.0], [0.1, 0.2, 0.3]));
+}
+
+#[test]
+fn inertial_origin_with_only_one_attribute_keeps_the_other_at_zero() {
+    let r = parse_urdf(
+        "<robot name=\"t\"><link name=\"a\"><inertial><origin xyz=\"1 2 3\"/></inertial></link><link name=\"b\"><inertial><origin rpy=\"0.1 0.2 0.3\"/></inertial></link></robot>",
+    )
+    .unwrap();
+    let a = r.links[0].inertial.as_ref().unwrap().origin;
+    let b = r.links[1].inertial.as_ref().unwrap().origin;
+    assert_eq!((a.xyz, a.rpy), ([1.0, 2.0, 3.0], [0.0; 3]));
+    assert_eq!((b.xyz, b.rpy), ([0.0; 3], [0.1, 0.2, 0.3]));
+}
+
+#[test]
+fn bad_numbers_in_axis_dynamics_and_inertial_origin_are_parse_errors() {
+    let bad = [
+        "<robot name=\"t\"><link name=\"a\"/><link name=\"b\"/><joint name=\"j\" type=\"revolute\"><parent link=\"a\"/><child link=\"b\"/><axis xyz=\"0 1\"/></joint></robot>",
+        "<robot name=\"t\"><link name=\"a\"/><link name=\"b\"/><joint name=\"j\" type=\"revolute\"><parent link=\"a\"/><child link=\"b\"/><dynamics damping=\"x\"/></joint></robot>",
+        "<robot name=\"t\"><link name=\"a\"/><link name=\"b\"/><joint name=\"j\" type=\"revolute\"><parent link=\"a\"/><child link=\"b\"/><dynamics friction=\"x\"/></joint></robot>",
+        "<robot name=\"t\"><link name=\"a\"><inertial><origin xyz=\"1 2\"/></inertial></link></robot>",
+        "<robot name=\"t\"><link name=\"a\"><inertial><origin rpy=\"1 2\"/></inertial></link></robot>",
+    ];
+    for src in bad {
+        let err = parse_urdf(src).unwrap_err().0;
+        assert!(err.starts_with("1:"), "{src}: {err}");
     }
 }

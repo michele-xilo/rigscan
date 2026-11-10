@@ -1,8 +1,8 @@
 //! URDF parser.
 
 use crate::model::{
-    Format, Inertia, Inertial, Joint, JointKind, Limit, Link, MeshRef, Mimic, ParseError, Robot,
-    Span, Unmapped,
+    Dynamics, Format, Inertia, Inertial, Joint, JointKind, Limit, Link, MeshRef, Mimic, Origin,
+    ParseError, Robot, Span, Unmapped,
 };
 use quick_xml::events::BytesStart;
 use std::borrow::Cow;
@@ -31,7 +31,7 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
             Event::Empty(e) => (e, false),
             Event::End(_) => {
                 if stack.pop() == Some(Ctx::Joint) {
-                    robot.joints.extend(joint.take());
+                    robot.joints.extend(joint.take().map(with_default_axis));
                 }
                 continue;
             }
@@ -62,6 +62,8 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
                     origin: Default::default(),
                     limit: None,
                     mimic: None,
+                    axis: None,
+                    dynamics: None,
                     span: spans.at(start),
                 })
             }
@@ -70,8 +72,17 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
                     l.inertial = Some(Inertial {
                         mass: None,
                         inertia: None,
+                        origin: Origin::default(),
                         span: spans.at(start),
                     });
+                }
+            }
+            (Some(Ctx::Inertial), "origin") => {
+                let xyz = at(vec3(&e, "xyz"), &mut spans, start)?;
+                let rpy = at(vec3(&e, "rpy"), &mut spans, start)?;
+                if let Some(i) = robot.links.last_mut().and_then(|l| l.inertial.as_mut()) {
+                    i.origin.xyz = xyz.unwrap_or(i.origin.xyz);
+                    i.origin.rpy = rpy.unwrap_or(i.origin.rpy);
                 }
             }
             (Some(Ctx::Inertial), "mass") => {
@@ -120,6 +131,19 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
                     }
                 }
             }
+            (Some(Ctx::Joint), "axis") => {
+                let xyz = at(vec3(&e, "xyz"), &mut spans, start)?;
+                if let Some(j) = joint.as_mut() {
+                    j.axis = Some(xyz.unwrap_or(DEFAULT_AXIS));
+                }
+            }
+            (Some(Ctx::Joint), "dynamics") => {
+                let damping = at(number(&e, "damping"), &mut spans, start)?;
+                let friction = at(number(&e, "friction"), &mut spans, start)?;
+                if let Some(j) = joint.as_mut() {
+                    j.dynamics = Some(Dynamics { damping, friction });
+                }
+            }
             (Some(Ctx::Joint), "limit") => {
                 if let Some(j) = joint.as_mut() {
                     j.limit = Some(Limit {
@@ -165,7 +189,7 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
         } else if name == "joint" && parent == Some(Ctx::Robot) {
             // No End event follows a self-closing joint, so it is kept here
             // for lint to report instead of being replaced by the next one.
-            robot.joints.extend(joint.take());
+            robot.joints.extend(joint.take().map(with_default_axis));
         }
     }
     if !stack.is_empty() {
@@ -178,6 +202,21 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
 }
 
 /// The attribute value, borrowed from the source unless it needed unescaping.
+/// The axis URDF gives a joint that does not author one.
+const DEFAULT_AXIS: [f64; 3] = [1.0, 0.0, 0.0];
+
+/// A moving joint always has an axis; a fixed or floating one has none even if one is written.
+fn with_default_axis(mut j: Joint) -> Joint {
+    match j.kind {
+        JointKind::Revolute | JointKind::Continuous | JointKind::Prismatic => {
+            j.axis.get_or_insert(DEFAULT_AXIS);
+        }
+        JointKind::Fixed | JointKind::Floating => j.axis = None,
+        _ => {}
+    }
+    j
+}
+
 fn attr_ref<'a>(e: &'a BytesStart, key: &str) -> Result<Option<Cow<'a, str>>, ParseError> {
     match e.try_get_attribute(key) {
         Ok(Some(a)) => a

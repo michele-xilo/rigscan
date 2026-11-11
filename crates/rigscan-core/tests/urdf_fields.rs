@@ -449,6 +449,10 @@ fn bad_shape_numbers_are_parse_errors() {
         "<visual><geometry><cylinder radius=\"1\"/></geometry></visual>",
         "<visual><geometry><mesh filename=\"a\" scale=\"1\"/></geometry></visual>",
         "<visual><origin xyz=\"1\"/><geometry><sphere radius=\"1\"/></geometry></visual>",
+        "<visual><origin rpy=\"1\"/><geometry><sphere radius=\"1\"/></geometry></visual>",
+        "<visual><geometry><mesh/></geometry></visual>",
+        "<visual><geometry><cylinder length=\"1\"/></geometry></visual>",
+        "<visual><geometry><box/></geometry></visual>",
     ] {
         let src = format!("<robot name=\"t\"><link name=\"a\">{inner}</link></robot>");
         assert!(parse_urdf(&src).is_err(), "{inner}");

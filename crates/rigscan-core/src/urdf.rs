@@ -111,11 +111,7 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
                 }
             }
             (Some(Ctx::Link), "visual" | "collision") => {
-                let role = if name == "visual" {
-                    Role::Visual
-                } else {
-                    Role::Collision
-                };
+                let role = [Role::Collision, Role::Visual][usize::from(name == "visual")];
                 let first = robot.links.last().map_or(0, |l| l.shapes.len());
                 shape = Some((role, Origin::default(), first));
             }
@@ -264,22 +260,21 @@ fn with_default_axis(mut j: Joint) -> Joint {
 }
 
 fn geometry(e: &BytesStart, tag: &str) -> Result<Geometry, ParseError> {
-    Ok(match tag {
-        "box" => Geometry::Box {
-            size: vec3(e, "size")?.ok_or_else(|| ParseError("missing attribute `size`".into()))?,
-        },
-        "sphere" => Geometry::Sphere {
-            radius: required(e, "radius")?,
-        },
-        "cylinder" => Geometry::Cylinder {
-            radius: required(e, "radius")?,
-            length: required(e, "length")?,
-        },
-        _ => Geometry::Mesh {
-            filename: required_str(e, "filename")?,
-            scale: vec3(e, "scale")?.unwrap_or([1.0; 3]),
-        },
-    })
+    if tag == "mesh" {
+        let filename = required_str(e, "filename")?;
+        let scale = vec3(e, "scale")?.unwrap_or([1.0; 3]);
+        return Ok(Geometry::Mesh { filename, scale });
+    }
+    if tag == "box" {
+        let size = vec3(e, "size")?.ok_or_else(|| ParseError("missing attribute `size`".into()))?;
+        return Ok(Geometry::Box { size });
+    }
+    let radius = required(e, "radius")?;
+    if tag == "sphere" {
+        return Ok(Geometry::Sphere { radius });
+    }
+    let length = required(e, "length")?;
+    Ok(Geometry::Cylinder { radius, length })
 }
 
 fn attr_ref<'a>(e: &'a BytesStart, key: &str) -> Result<Option<Cow<'a, str>>, ParseError> {

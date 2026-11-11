@@ -20,16 +20,62 @@ impl Span {
 pub struct Link {
     pub name: String,
     pub inertial: Option<Inertial>,
-    /// Mesh files referenced by the link's `<visual>` and `<collision>`
-    /// geometry, in document order.
-    pub meshes: Vec<MeshRef>,
+    /// Visual and collision geometry, in document order.
+    pub shapes: Vec<Shape>,
     pub span: Span,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MeshRef {
-    pub filename: String,
+impl Link {
+    /// The mesh files the link's shapes reference, with the position of each geometry element.
+    pub fn meshes(&self) -> impl Iterator<Item = (&str, Span)> {
+        self.shapes.iter().filter_map(|s| match &s.geometry {
+            Geometry::Mesh { filename, .. } => Some((filename.as_str(), s.span)),
+            _ => None,
+        })
+    }
+}
+
+/// One piece of a link's geometry.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Shape {
+    pub role: Role,
+    pub geometry: Geometry,
+    /// Pose relative to the link frame.
+    pub origin: Origin,
+    /// The geometry element.
     pub span: Span,
+}
+
+/// What a shape is used for. A format with one geometry for both (MJCF) says `Both`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Role {
+    Visual,
+    Collision,
+    Both,
+}
+
+/// Sizes are full extents, not half extents.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Geometry {
+    Box {
+        size: [f64; 3],
+    },
+    Sphere {
+        radius: f64,
+    },
+    Cylinder {
+        radius: f64,
+        length: f64,
+    },
+    /// `length` is the cylindrical part, without the caps.
+    Capsule {
+        radius: f64,
+        length: f64,
+    },
+    Mesh {
+        filename: String,
+        scale: [f64; 3],
+    },
 }
 
 /// The `<inertial>` element. `mass` is optional so a rule can tell a missing

@@ -177,7 +177,7 @@ fn two_joints_same_parent(format: rigscan_core::Format) -> Vec<&'static str> {
     let link = |n: &str| Link {
         name: n.into(),
         inertial: None,
-        meshes: Vec::new(),
+        shapes: Vec::new(),
         span,
     };
     let joint = |n: &str, p: &str| Joint {
@@ -215,7 +215,7 @@ fn rs004_flags_a_body_reached_from_two_parents_in_mjcf() {
     let link = |n: &str| Link {
         name: n.into(),
         inertial: None,
-        meshes: Vec::new(),
+        shapes: Vec::new(),
         span,
     };
     let joint = |n: &str, p: &str| Joint {

@@ -1,4 +1,6 @@
-use rigscan_core::{lint, parse_mjcf, Format, IncludeLoader, Included, JointKind, Robot, Span};
+use rigscan_core::{
+    lint, parse_mjcf, Format, Geometry, IncludeLoader, Included, JointKind, Robot, Role, Span,
+};
 
 struct NoFiles;
 
@@ -234,9 +236,8 @@ fn mesh_geoms_become_mesh_refs_joined_with_meshdir() {
 </mujoco>"#,
     );
     let m: Vec<(&str, u32)> = r.links[1]
-        .meshes
-        .iter()
-        .map(|m| (m.filename.as_str(), m.span.line))
+        .meshes()
+        .map(|(file, span)| (file, span.line))
         .collect();
     assert_eq!(m, [("assets/m.stl", 5), ("assets/dir/other.obj", 6)]);
 }
@@ -245,7 +246,7 @@ fn mesh_geoms_become_mesh_refs_joined_with_meshdir() {
 fn unmapped_parts_are_kept_with_name_and_span() {
     let r = robot(
         r#"<mujoco>
-  <worldbody><body name="a" quat="1 0 0 0"><joint name="j"/><geom name="g" size="1"/></body></worldbody>
+  <worldbody><body name="a" quat="1 0 0 0"><joint name="j"/><geom name="g" type="ellipsoid" size="1 1 1"/></body></worldbody>
   <actuator><motor name="m" joint="j"/></actuator>
   <tendon><fixed name="t"/></tendon>
 </mujoco>"#,
@@ -333,11 +334,11 @@ fn mesh_paths_without_meshdir_or_already_absolute_are_kept_as_written() {
   <worldbody><geom mesh="abs"/></worldbody>
 </mujoco>"#,
     );
-    assert_eq!(r.links[0].meshes[0].filename, "/opt/m.stl");
+    assert_eq!(r.links[0].meshes().next().unwrap().0, "/opt/m.stl");
     let r = robot(
         "<mujoco><asset><mesh name=\"m\" file=\"m.stl\"/></asset><worldbody><geom mesh=\"m\"/></worldbody></mujoco>",
     );
-    assert_eq!(r.links[0].meshes[0].filename, "m.stl");
+    assert_eq!(r.links[0].meshes().next().unwrap().0, "m.stl");
 }
 
 #[test]
@@ -345,7 +346,7 @@ fn mesh_asset_without_a_file_gives_geoms_no_mesh_ref() {
     let r = robot(
         "<mujoco><asset><mesh name=\"m\"/></asset><worldbody><geom mesh=\"m\"/></worldbody></mujoco>",
     );
-    assert!(r.links[0].meshes.is_empty());
+    assert_eq!(r.links[0].meshes().count(), 0);
     assert!(r.unmapped.is_empty());
 }
 
@@ -420,4 +421,165 @@ fn inertial_pos_is_the_centre_of_mass() {
         r.links[1].inertial.as_ref().unwrap().origin.xyz,
         [1.0, 2.0, 3.0]
     );
+}
+
+fn shapes(geoms: &str) -> Vec<(Role, Geometry)> {
+    robot(&format!(
+        "<mujoco><worldbody><body name=\"a\">{geoms}</body></worldbody></mujoco>"
+    ))
+    .links[1]
+        .shapes
+        .iter()
+        .map(|s| (s.role, s.geometry.clone()))
+        .collect()
+}
+
+#[test]
+fn primitive_geoms_become_shapes_with_full_extents() {
+    let got = shapes(
+        "<geom size=\"0.5\"/>\
+         <geom type=\"box\" size=\"1 2 3\"/>\
+         <geom type=\"cylinder\" size=\"0.1 2\"/>\
+         <geom type=\"capsule\" size=\"0.2 1.5\"/>",
+    );
+    assert_eq!(
+        got,
+        [
+            (Role::Both, Geometry::Sphere { radius: 0.5 }),
+            (
+                Role::Both,
+                Geometry::Box {
+                    size: [2.0, 4.0, 6.0]
+                }
+            ),
+            (
+                Role::Both,
+                Geometry::Cylinder {
+                    radius: 0.1,
+                    length: 4.0
+                }
+            ),
+            (
+                Role::Both,
+                Geometry::Capsule {
+                    radius: 0.2,
+                    length: 3.0
+                }
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_geom_with_no_contacts_is_visual_only() {
+    let got = shapes(
+        "<geom size=\"1\" contype=\"0\" conaffinity=\"0\"/>\
+         <geom size=\"1\" contype=\"0\"/>\
+         <geom size=\"1\" conaffinity=\"0\"/>",
+    );
+    let roles: Vec<_> = got.iter().map(|g| g.0).collect();
+    assert_eq!(roles, [Role::Visual, Role::Both, Role::Both]);
+}
+
+#[test]
+fn geom_pos_is_the_shape_origin_and_default_class_values_apply() {
+    let r = robot(
+        "<mujoco><default><geom size=\"2\" pos=\"1 2 3\"/></default><worldbody><body name=\"a\"><geom/></body></worldbody></mujoco>",
+    );
+    let s = &r.links[1].shapes[0];
+    assert_eq!(s.geometry, Geometry::Sphere { radius: 2.0 });
+    assert_eq!(s.origin.xyz, [1.0, 2.0, 3.0]);
+}
+
+#[test]
+fn mesh_geoms_carry_the_asset_file_and_scale() {
+    let r = robot(
+        r#"<mujoco>
+  <compiler meshdir="assets"/>
+  <asset><mesh name="m" file="m.stl" scale="1 2 3"/><mesh name="n" file="n.stl"/></asset>
+  <worldbody><body name="a">
+    <geom type="mesh" mesh="m"/>
+    <geom mesh="n"/>
+  </body></worldbody>
+</mujoco>"#,
+    );
+    let g: Vec<_> = r.links[1]
+        .shapes
+        .iter()
+        .map(|s| s.geometry.clone())
+        .collect();
+    assert_eq!(
+        g,
+        [
+            Geometry::Mesh {
+                filename: "assets/m.stl".into(),
+                scale: [1.0, 2.0, 3.0]
+            },
+            Geometry::Mesh {
+                filename: "assets/n.stl".into(),
+                scale: [1.0; 3]
+            },
+        ]
+    );
+}
+
+#[test]
+fn geoms_the_model_cannot_hold_stay_unmapped() {
+    let r = robot(
+        "<mujoco><worldbody><body name=\"a\">\
+         <geom name=\"e\" type=\"ellipsoid\" size=\"1 2 3\"/>\
+         <geom name=\"p\" type=\"plane\" size=\"1 1 1\"/>\
+         <geom name=\"f\" type=\"capsule\" size=\"1\" fromto=\"0 0 0 1 0 0\"/>\
+         <geom name=\"s\" type=\"box\" size=\"1 2\"/>\
+         </body></worldbody></mujoco>",
+    );
+    assert!(r.links[1].shapes.is_empty());
+    let lost: Vec<_> = r
+        .unmapped
+        .iter()
+        .map(|u| (u.what.as_str(), u.name.as_deref()))
+        .collect();
+    assert_eq!(
+        lost,
+        [
+            ("geom", Some("e")),
+            ("geom", Some("p")),
+            ("geom", Some("f")),
+            ("geom", Some("s"))
+        ]
+    );
+}
+
+#[test]
+fn geom_orientation_is_recorded_as_lost_and_the_shape_kept() {
+    let r = robot(
+        "<mujoco><worldbody><body name=\"a\"><geom name=\"g\" size=\"1\" euler=\"0 0 90\"/></body></worldbody></mujoco>",
+    );
+    assert_eq!(r.links[1].shapes.len(), 1);
+    let lost: Vec<_> = r
+        .unmapped
+        .iter()
+        .map(|u| (u.what.as_str(), u.name.as_deref()))
+        .collect();
+    assert_eq!(lost, [("euler", Some("g"))]);
+}
+
+#[test]
+fn invalid_geom_numbers_are_parse_errors_naming_the_position() {
+    for geom in ["<geom size=\"x\"/>", "<geom size=\"1\" pos=\"1 2\"/>"] {
+        let src = format!("<mujoco><worldbody>{geom}</worldbody></mujoco>");
+        let err = parse_mjcf(&src, &NoFiles)
+            .unwrap()
+            .to_robot()
+            .unwrap_err()
+            .0;
+        assert!(err.starts_with("1:"), "{geom}: {err}");
+    }
+}
+
+#[test]
+fn a_bad_mesh_scale_is_a_parse_error() {
+    let src = "<mujoco><asset><mesh name=\"m\" file=\"m.stl\" scale=\"1 2\"/></asset><worldbody/></mujoco>";
+    let err = parse_mjcf(src, &NoFiles).unwrap().to_robot().unwrap_err().0;
+    assert!(err.starts_with("1:") && err.contains("scale"), "{err}");
 }

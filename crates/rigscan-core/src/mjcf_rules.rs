@@ -19,7 +19,7 @@ pub fn lint_mjcf(mjcf: &Mjcf, robot: &Robot, resolver: &dyn Resolver) -> Vec<Fin
         &mut out,
     );
     // RS017
-    let assets: HashSet<&str> = mesh_assets(&mjcf.root).map(|(n, _)| n).collect();
+    let assets: HashSet<&str> = mesh_assets(&mjcf.root).map(|(n, _, _)| n).collect();
     undefined_meshes(&mjcf.root, &assets, &mut out);
     // RS018
     refs(

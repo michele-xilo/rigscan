@@ -53,7 +53,7 @@ fn link(name: &str, inertial: Option<Inertial>) -> Link {
     Link {
         name: name.to_string(),
         inertial,
-        meshes: Vec::new(),
+        shapes: Vec::new(),
         span: Span::NONE,
     }
 }

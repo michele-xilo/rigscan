@@ -2,8 +2,8 @@
 
 use crate::mjcf::{Mjcf, MjcfNode};
 use crate::model::{
-    Dynamics, Format, Inertia, Inertial, Joint, JointKind, Limit, Link, MeshRef, Origin,
-    ParseError, Robot, Unmapped,
+    Dynamics, Format, Geometry, Inertia, Inertial, Joint, JointKind, Limit, Link, Origin,
+    ParseError, Robot, Role, Shape, Unmapped,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -24,7 +24,7 @@ impl Mjcf {
     /// Every `<joint>` becomes one [`Joint`] from the parent body's link to the body's own, so a
     /// body with several joints keeps them all. A body without a joint is welded by a fixed joint.
     pub fn to_robot(&self) -> Result<Robot, ParseError> {
-        let mut m = Mapper::new(self);
+        let mut m = Mapper::new(self)?;
         m.run(&self.root)?;
         Ok(m.robot)
     }
@@ -37,15 +37,15 @@ struct Mapper {
     /// MuJoCo's default: a `range` limits the joint unless `limited="false"`.
     autolimits: bool,
     meshdir: String,
-    /// Asset mesh name to the file it is read from.
-    meshes: HashMap<String, String>,
+    /// Asset mesh name to the file it is read from and its scale.
+    meshes: HashMap<String, (String, [f64; 3])>,
     /// Names in use, so a generated name never collides with a real one.
     link_names: HashSet<String>,
     joint_names: HashSet<String>,
 }
 
 impl Mapper {
-    fn new(mjcf: &Mjcf) -> Self {
+    fn new(mjcf: &Mjcf) -> Result<Self, ParseError> {
         let root = &mjcf.root;
         let mut robot = Robot::new(Format::Mjcf);
         robot.name = root.attr("model").map(str::to_string);
@@ -70,15 +70,16 @@ impl Mapper {
                 m.meshdir = dir.to_string();
             }
         }
-        for (name, file) in mesh_assets(root) {
+        for (name, file, node) in mesh_assets(root) {
             if let Some(file) = file {
-                m.meshes.insert(name.to_string(), file.to_string());
+                let scale = numbers(node, "scale", 3)?.map_or([1.0; 3], |v| [v[0], v[1], v[2]]);
+                m.meshes.insert(name.to_string(), (file.to_string(), scale));
             }
         }
         for world in children(root, "worldbody") {
             m.reserve_names(world);
         }
-        m
+        Ok(m)
     }
 
     fn reserve_names(&mut self, node: &MjcfNode) {
@@ -106,7 +107,7 @@ impl Mapper {
                 self.robot.links.push(Link {
                     name: "world".into(),
                     inertial: None,
-                    meshes: Vec::new(),
+                    shapes: Vec::new(),
                     span: world.anchor,
                 });
             }
@@ -120,7 +121,7 @@ impl Mapper {
         for c in &node.children {
             match c.tag.as_str() {
                 "body" => self.body(c, parent)?,
-                "geom" => self.geom(c, link),
+                "geom" => self.geom(c, link)?,
                 t if UNEXPANDED.contains(&t) => self.lose(t, c.attr("name"), c),
                 _ => {}
             }
@@ -144,7 +145,7 @@ impl Mapper {
         self.robot.links.push(Link {
             name: name.clone(),
             inertial,
-            meshes: Vec::new(),
+            shapes: Vec::new(),
             span: node.anchor,
         });
         for key in ORIENTATION {
@@ -253,20 +254,45 @@ impl Mapper {
         })
     }
 
-    fn geom(&mut self, node: &MjcfNode, link: usize) {
-        let file = node.attr("mesh").and_then(|m| self.meshes.get(m));
-        match file {
-            Some(file) => {
-                let filename = join(&self.meshdir, file);
-                self.robot.links[link].meshes.push(MeshRef {
-                    filename,
-                    span: node.anchor,
-                });
+    fn geom(&mut self, node: &MjcfNode, link: usize) -> Result<(), ParseError> {
+        let name = node.attr("name");
+        for key in ORIENTATION {
+            if node.attr(key).is_some() {
+                self.lose(key, name, node);
             }
-            // RS017 reports a mesh geom naming an unknown asset.
-            None if node.attr("mesh").is_some() => {}
-            None => self.lose("geom", node.attr("name"), node),
         }
+        let geometry = match node.attr("mesh") {
+            Some(m) => match self.meshes.get(m) {
+                Some((file, scale)) => Some(Geometry::Mesh {
+                    filename: join(&self.meshdir, file),
+                    scale: *scale,
+                }),
+                // RS017 reports a mesh geom naming an unknown asset.
+                None => return Ok(()),
+            },
+            None => primitive(node)?,
+        };
+        let Some(geometry) = geometry else {
+            self.lose("geom", name, node);
+            return Ok(());
+        };
+        // MuJoCo collides two geoms only when contype/conaffinity say so; both 0 is look-only.
+        let role = if node.attr("contype") == Some("0") && node.attr("conaffinity") == Some("0") {
+            Role::Visual
+        } else {
+            Role::Both
+        };
+        let xyz = numbers(node, "pos", 3)?.map_or([0.0; 3], |v| [v[0], v[1], v[2]]);
+        self.robot.links[link].shapes.push(Shape {
+            role,
+            geometry,
+            origin: Origin {
+                xyz,
+                ..Origin::default()
+            },
+            span: node.anchor,
+        });
+        Ok(())
     }
 
     fn lose(&mut self, what: &str, name: Option<&str>, node: &MjcfNode) {
@@ -284,13 +310,15 @@ pub(crate) fn children<'a>(node: &'a MjcfNode, tag: &'a str) -> impl Iterator<It
 
 /// Every mesh asset as (name, file). A mesh built from inline vertices has a name and no file;
 /// one with neither has no name to refer to it by and is left out.
-pub(crate) fn mesh_assets(root: &MjcfNode) -> impl Iterator<Item = (&str, Option<&str>)> {
+pub(crate) fn mesh_assets(
+    root: &MjcfNode,
+) -> impl Iterator<Item = (&str, Option<&str>, &MjcfNode)> {
     children(root, "asset")
         .flat_map(|a| children(a, "mesh"))
         .filter_map(|m| {
             let file = m.attr("file");
             let name = m.attr("name").or_else(|| file.map(stem))?;
-            Some((name, file))
+            Some((name, file, m))
         })
 }
 
@@ -353,29 +381,72 @@ fn inertial(node: &MjcfNode) -> Result<Inertial, ParseError> {
     })
 }
 
-/// The attribute as `count` finite numbers, or an error that names the element's position.
-fn numbers(node: &MjcfNode, key: &str, count: usize) -> Result<Option<Vec<f64>>, ParseError> {
+/// A primitive geom's shape, or `None` when the model cannot hold it (`fromto`, ellipsoid, plane,
+/// heightfield, sdf, or a size with too few numbers). MuJoCo sizes are half extents.
+fn primitive(node: &MjcfNode) -> Result<Option<Geometry>, ParseError> {
+    if node.attr("fromto").is_some() {
+        return Ok(None);
+    }
+    let size = list(node, "size")?.unwrap_or_default();
+    Ok(
+        match (node.attr("type").unwrap_or("sphere"), size.as_slice()) {
+            ("sphere", [r, ..]) => Some(Geometry::Sphere { radius: *r }),
+            ("box", [x, y, z, ..]) => Some(Geometry::Box {
+                size: [2.0 * x, 2.0 * y, 2.0 * z],
+            }),
+            ("cylinder", [r, h, ..]) => Some(Geometry::Cylinder {
+                radius: *r,
+                length: 2.0 * h,
+            }),
+            ("capsule", [r, h, ..]) => Some(Geometry::Capsule {
+                radius: *r,
+                length: 2.0 * h,
+            }),
+            _ => None,
+        },
+    )
+}
+
+fn position_error(node: &MjcfNode, msg: String) -> ParseError {
+    let file = node
+        .file
+        .as_deref()
+        .map(|f| format!("{f}:"))
+        .unwrap_or_default();
+    ParseError(format!("{file}{}:{}: {msg}", node.span.line, node.span.col))
+}
+
+/// The attribute as finite numbers of any count, or an error that names the element's position.
+fn list(node: &MjcfNode, key: &str) -> Result<Option<Vec<f64>>, ParseError> {
     let Some(v) = node.attr(key) else {
         return Ok(None);
-    };
-    let at = |msg: String| {
-        let file = node
-            .file
-            .as_deref()
-            .map(|f| format!("{f}:"))
-            .unwrap_or_default();
-        ParseError(format!("{file}{}:{}: {msg}", node.span.line, node.span.col))
     };
     let nums: Vec<f64> = v
         .split_whitespace()
         .map(|t| t.parse::<f64>().ok().filter(|n| n.is_finite()))
         .collect::<Option<_>>()
-        .ok_or_else(|| at(format!("invalid number in `{v}` in attribute `{key}`")))?;
+        .ok_or_else(|| {
+            position_error(
+                node,
+                format!("invalid number in `{v}` in attribute `{key}`"),
+            )
+        })?;
+    Ok(Some(nums))
+}
+
+/// The attribute as `count` finite numbers, or an error that names the element's position.
+fn numbers(node: &MjcfNode, key: &str, count: usize) -> Result<Option<Vec<f64>>, ParseError> {
+    let Some(nums) = list(node, key)? else {
+        return Ok(None);
+    };
     if nums.len() != count {
-        return Err(at(format!(
-            "attribute `{key}` needs {count} numbers, found {}",
-            nums.len()
-        )));
+        return Err(position_error(
+            node,
+            format!(
+                "attribute `{key}` needs {count} numbers, found {}",
+                nums.len()
+            ),
+        ));
     }
     Ok(Some(nums))
 }

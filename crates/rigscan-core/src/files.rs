@@ -34,15 +34,12 @@ pub(crate) fn files(robot: &Robot, resolver: &dyn Resolver, out: &mut Vec<Findin
 /// RS014: a referenced mesh file does not exist.
 fn missing_meshes(robot: &Robot, resolver: &dyn Resolver, out: &mut Vec<Finding>) {
     for (i, link) in robot.links.iter().enumerate() {
-        for mesh in &link.meshes {
-            if resolver.resolve(&mesh.filename) == Resolution::Missing {
+        for (filename, span) in link.meshes() {
+            if resolver.resolve(filename) == Resolution::Missing {
                 out.push(critical(
                     "RS014",
-                    format!(
-                        "link `{}` mesh file `{}` was not found",
-                        link.name, mesh.filename
-                    ),
-                    mesh.span,
+                    format!("link `{}` mesh file `{filename}` was not found", link.name),
+                    span,
                     Element::Link(i),
                 ));
             }

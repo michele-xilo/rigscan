@@ -136,17 +136,11 @@ fn robot_level_elements_are_recorded_without_a_name() {
 }
 
 #[test]
-fn link_visual_and_collision_are_recorded_under_the_link() {
+fn a_material_inside_visual_is_recorded_under_the_link() {
     let got = lost(
-        "<robot name=\"r\">\n  <link name=\"a\">\n    <visual><geometry><box size=\"1 1 1\"/></geometry></visual>\n    <collision><geometry><mesh filename=\"a.stl\"/></geometry></collision>\n  </link>\n</robot>",
+        "<robot name=\"r\">\n  <link name=\"a\">\n    <visual><geometry><box size=\"1 1 1\"/></geometry>\n      <material name=\"m\"/></visual>\n  </link>\n</robot>",
     );
-    assert_eq!(
-        got,
-        [
-            entry("visual", Some("a"), 3, 5),
-            entry("collision", Some("a"), 4, 5),
-        ]
-    );
+    assert_eq!(got, [entry("visual/material", Some("a"), 4, 7)]);
 }
 
 #[test]

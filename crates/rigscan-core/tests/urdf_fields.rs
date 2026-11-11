@@ -1,4 +1,6 @@
-use rigscan_core::{parse_urdf, Inertia, Inertial, Joint, JointKind, Limit, MeshRef, Origin, Span};
+use rigscan_core::{
+    parse_urdf, Geometry, Inertia, Inertial, Joint, JointKind, Limit, Origin, Role, Shape, Span,
+};
 
 fn joint_with(type_attr: &str, inner: &str) -> Joint {
     let src = format!(
@@ -217,19 +219,13 @@ fn mesh_references_are_collected_from_visual_and_collision_with_spans() {
   </link>
 </robot>"#;
 
-    let meshes = parse_urdf(src).unwrap().links.remove(0).meshes;
+    let link = parse_urdf(src).unwrap().links.remove(0);
 
     assert_eq!(
-        meshes,
-        vec![
-            MeshRef {
-                filename: "package://pkg/meshes/a.stl".into(),
-                span: Span { line: 3, col: 23 },
-            },
-            MeshRef {
-                filename: "meshes/a_collision.obj".into(),
-                span: Span { line: 4, col: 26 },
-            },
+        link.meshes().collect::<Vec<_>>(),
+        [
+            ("package://pkg/meshes/a.stl", Span { line: 3, col: 23 }),
+            ("meshes/a_collision.obj", Span { line: 4, col: 26 }),
         ]
     );
 }
@@ -241,7 +237,7 @@ fn primitive_geometry_has_no_mesh_references() {
 <collision><geometry><cylinder radius=\"1\" length=\"2\"/></geometry></collision>",
     );
 
-    assert!(l.meshes.is_empty());
+    assert_eq!(l.meshes().count(), 0);
 }
 
 #[test]
@@ -349,5 +345,112 @@ fn bad_numbers_in_axis_dynamics_and_inertial_origin_are_parse_errors() {
     for src in bad {
         let err = parse_urdf(src).unwrap_err().0;
         assert!(err.starts_with("1:"), "{src}: {err}");
+    }
+}
+
+fn shapes_of(inner: &str) -> Vec<Shape> {
+    parse_urdf(&format!(
+        "<robot name=\"t\"><link name=\"a\">{inner}</link></robot>"
+    ))
+    .unwrap()
+    .links
+    .remove(0)
+    .shapes
+}
+
+#[test]
+fn visual_and_collision_primitives_become_shapes_with_their_role() {
+    let s = shapes_of(
+        "<visual><geometry><box size=\"1 2 3\"/></geometry></visual>\
+         <collision><geometry><sphere radius=\"0.5\"/></geometry></collision>\
+         <collision><geometry><cylinder radius=\"0.1\" length=\"2\"/></geometry></collision>",
+    );
+    let got: Vec<_> = s.iter().map(|s| (s.role, s.geometry.clone())).collect();
+    assert_eq!(
+        got,
+        [
+            (
+                Role::Visual,
+                Geometry::Box {
+                    size: [1.0, 2.0, 3.0]
+                }
+            ),
+            (Role::Collision, Geometry::Sphere { radius: 0.5 }),
+            (
+                Role::Collision,
+                Geometry::Cylinder {
+                    radius: 0.1,
+                    length: 2.0
+                }
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_mesh_shape_keeps_filename_scale_and_default_scale() {
+    let s = shapes_of(
+        "<visual><geometry><mesh filename=\"a.stl\" scale=\"1 2 3\"/></geometry></visual>\
+         <collision><geometry><mesh filename=\"b.stl\"/></geometry></collision>",
+    );
+    assert_eq!(
+        s[0].geometry,
+        Geometry::Mesh {
+            filename: "a.stl".into(),
+            scale: [1.0, 2.0, 3.0]
+        }
+    );
+    assert_eq!(
+        s[1].geometry,
+        Geometry::Mesh {
+            filename: "b.stl".into(),
+            scale: [1.0; 3]
+        }
+    );
+}
+
+#[test]
+fn shape_origin_is_read_before_or_after_the_geometry() {
+    let s = shapes_of(
+        "<visual><origin xyz=\"1 2 3\" rpy=\"0.1 0.2 0.3\"/><geometry><sphere radius=\"1\"/></geometry></visual>\
+         <collision><geometry><sphere radius=\"1\"/></geometry><origin xyz=\"4 5 6\"/></collision>\
+         <visual><geometry><sphere radius=\"1\"/></geometry></visual>",
+    );
+    assert_eq!(
+        (s[0].origin.xyz, s[0].origin.rpy),
+        ([1.0, 2.0, 3.0], [0.1, 0.2, 0.3])
+    );
+    assert_eq!(
+        (s[1].origin.xyz, s[1].origin.rpy),
+        ([4.0, 5.0, 6.0], [0.0; 3])
+    );
+    assert_eq!(s[2].origin, Origin::default());
+}
+
+#[test]
+fn shape_span_is_the_geometry_element() {
+    let r = parse_urdf(
+        "<robot name=\"t\">\n  <link name=\"a\">\n    <visual><geometry><box size=\"1 1 1\"/></geometry></visual>\n  </link>\n</robot>",
+    )
+    .unwrap();
+    assert_eq!(r.links[0].shapes[0].span, Span { line: 3, col: 23 });
+}
+
+#[test]
+fn a_shape_without_geometry_is_not_a_shape() {
+    assert!(shapes_of("<visual/><collision><origin xyz=\"1 0 0\"/></collision>").is_empty());
+}
+
+#[test]
+fn bad_shape_numbers_are_parse_errors() {
+    for inner in [
+        "<visual><geometry><box size=\"1 2\"/></geometry></visual>",
+        "<visual><geometry><sphere/></geometry></visual>",
+        "<visual><geometry><cylinder radius=\"1\"/></geometry></visual>",
+        "<visual><geometry><mesh filename=\"a\" scale=\"1\"/></geometry></visual>",
+        "<visual><origin xyz=\"1\"/><geometry><sphere radius=\"1\"/></geometry></visual>",
+    ] {
+        let src = format!("<robot name=\"t\"><link name=\"a\">{inner}</link></robot>");
+        assert!(parse_urdf(&src).is_err(), "{inner}");
     }
 }

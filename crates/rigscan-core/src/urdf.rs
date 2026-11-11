@@ -1,8 +1,8 @@
 //! URDF parser.
 
 use crate::model::{
-    Dynamics, Format, Inertia, Inertial, Joint, JointKind, Limit, Link, MeshRef, Mimic, Origin,
-    ParseError, Robot, Span, Unmapped,
+    Dynamics, Format, Geometry, Inertia, Inertial, Joint, JointKind, Limit, Link, Mimic, Origin,
+    ParseError, Robot, Role, Shape, Span, Unmapped,
 };
 use quick_xml::events::BytesStart;
 use std::borrow::Cow;
@@ -16,6 +16,9 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
     let mut spans = Spans::new(src);
     let mut robot = Robot::new(Format::Urdf);
     let mut joint: Option<Joint> = None;
+    // The <visual> or <collision> being read: its role, its origin so far, and where its shapes
+    // start in the link. <origin> may come before or after <geometry>.
+    let mut shape: Option<(Role, Origin, usize)> = None;
 
     // Elements are matched by their parent, so a <joint> inside <transmission>
     // or a <link> inside <gazebo>, which only reference the real ones, is ignored.
@@ -30,6 +33,9 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
             Event::Start(e) => (e, true),
             Event::Empty(e) => (e, false),
             Event::End(_) => {
+                if stack.last() == Some(&Ctx::Shape) {
+                    shape = None;
+                }
                 if stack.pop() == Some(Ctx::Joint) {
                     robot.joints.extend(joint.take().map(with_default_axis));
                 }
@@ -50,7 +56,7 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
             (Some(Ctx::Robot), "link") => robot.links.push(Link {
                 name: attr(&e, "name")?.unwrap_or_default(),
                 inertial: None,
-                meshes: Vec::new(),
+                shapes: Vec::new(),
                 span: spans.at(start),
             }),
             (Some(Ctx::Robot), "joint") => {
@@ -104,11 +110,51 @@ pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
                     i.inertia = Some(inertia);
                 }
             }
-            (Some(Ctx::Geometry), "mesh") => {
-                let filename = at(required_str(&e, "filename"), &mut spans, start)?;
+            (Some(Ctx::Link), "visual" | "collision") => {
+                let role = if name == "visual" {
+                    Role::Visual
+                } else {
+                    Role::Collision
+                };
+                let first = robot.links.last().map_or(0, |l| l.shapes.len());
+                shape = Some((role, Origin::default(), first));
+            }
+            (Some(Ctx::Shape), "origin") => {
+                let xyz = at(vec3(&e, "xyz"), &mut spans, start)?;
+                let rpy = at(vec3(&e, "rpy"), &mut spans, start)?;
+                if let (Some((_, origin, first)), Some(l)) =
+                    (shape.as_mut(), robot.links.last_mut())
+                {
+                    origin.xyz = xyz.unwrap_or(origin.xyz);
+                    origin.rpy = rpy.unwrap_or(origin.rpy);
+                    for s in &mut l.shapes[*first..] {
+                        s.origin = *origin;
+                    }
+                }
+            }
+            (Some(Ctx::Shape), "material") => {
+                let owner = robot.links.last().map(|l| l.name.clone());
+                let tag = match shape {
+                    Some((Role::Collision, ..)) => "collision",
+                    _ => "visual",
+                };
+                robot.unmapped.push(Unmapped {
+                    what: format!("{tag}/material"),
+                    name: owner,
+                    span: spans.at(start),
+                });
+            }
+            (Some(Ctx::Geometry), "box" | "sphere" | "cylinder" | "mesh") => {
+                let geometry = at(geometry(&e, name), &mut spans, start)?;
                 let span = spans.at(start);
-                if let Some(l) = robot.links.last_mut() {
-                    l.meshes.push(MeshRef { filename, span });
+                if let (Some((role, origin, _)), Some(l)) = (shape.as_ref(), robot.links.last_mut())
+                {
+                    l.shapes.push(Shape {
+                        role: *role,
+                        geometry,
+                        origin: *origin,
+                        span,
+                    });
                 }
             }
             (Some(Ctx::Joint), "parent") => {
@@ -215,6 +261,25 @@ fn with_default_axis(mut j: Joint) -> Joint {
         _ => {}
     }
     j
+}
+
+fn geometry(e: &BytesStart, tag: &str) -> Result<Geometry, ParseError> {
+    Ok(match tag {
+        "box" => Geometry::Box {
+            size: vec3(e, "size")?.ok_or_else(|| ParseError("missing attribute `size`".into()))?,
+        },
+        "sphere" => Geometry::Sphere {
+            radius: required(e, "radius")?,
+        },
+        "cylinder" => Geometry::Cylinder {
+            radius: required(e, "radius")?,
+            length: required(e, "length")?,
+        },
+        _ => Geometry::Mesh {
+            filename: required_str(e, "filename")?,
+            scale: vec3(e, "scale")?.unwrap_or([1.0; 3]),
+        },
+    })
 }
 
 fn attr_ref<'a>(e: &'a BytesStart, key: &str) -> Result<Option<Cow<'a, str>>, ParseError> {

@@ -5,6 +5,7 @@ use crate::model::{
     Dynamics, Format, Geometry, Inertia, Inertial, Joint, JointKind, Limit, Link, Origin,
     ParseError, Robot, Role, Shape, Unmapped,
 };
+use crate::rotation::{about, from_axis_angle, from_quat, from_xyaxes, from_zaxis, mul, rpy, Mat};
 use std::collections::{HashMap, HashSet};
 
 /// Sections whose children the neutral model has no place for.
@@ -14,9 +15,6 @@ const UNMAPPED_SECTIONS: [&str; 6] = [
 
 /// Elements that can hold bodies but are not expanded here, so what is inside is lost.
 const UNEXPANDED: [&str; 5] = ["frame", "replicate", "attach", "composite", "flexcomp"];
-
-/// Ways MJCF can give a body's orientation. Rotation is not converted, so each is reported.
-const ORIENTATION: [&str; 5] = ["quat", "axisangle", "euler", "xyaxes", "zaxis"];
 
 impl Mjcf {
     /// Map the resolved tree onto the format-neutral model.
@@ -34,6 +32,8 @@ struct Mapper {
     robot: Robot,
     /// Radians per unit of a hinge angle.
     angle: f64,
+    /// Order of the three `euler` angles; lowercase turns about the moving axes, uppercase the fixed ones.
+    eulerseq: String,
     /// MuJoCo's default: a `range` limits the joint unless `limited="false"`.
     autolimits: bool,
     meshdir: String,
@@ -53,6 +53,7 @@ impl Mapper {
         let mut m = Mapper {
             robot,
             angle: std::f64::consts::PI / 180.0,
+            eulerseq: "xyz".to_string(),
             autolimits: true,
             meshdir: String::new(),
             meshes: HashMap::new(),
@@ -65,6 +66,9 @@ impl Mapper {
             }
             if compiler.attr("autolimits") == Some("false") {
                 m.autolimits = false;
+            }
+            if let Some(seq) = compiler.attr("eulerseq") {
+                m.eulerseq = seq.to_string();
             }
             if let Some(dir) = compiler.attr("meshdir") {
                 m.meshdir = dir.to_string();
@@ -139,7 +143,7 @@ impl Mapper {
         };
         let link = self.robot.links.len();
         let inertial = match children(node, "inertial").next() {
-            Some(i) => Some(inertial(i)?),
+            Some(i) => Some(self.inertial(i)?),
             None => None,
         };
         self.robot.links.push(Link {
@@ -148,18 +152,12 @@ impl Mapper {
             shapes: Vec::new(),
             span: node.anchor,
         });
-        for key in ORIENTATION {
-            if node.attr(key).is_some() {
-                self.lose(key, Some(&name), node);
-            }
-        }
-
         let origin = Origin {
             xyz: match numbers(node, "pos", 3)? {
                 Some(v) => [v[0], v[1], v[2]],
                 None => [0.0; 3],
             },
-            ..Origin::default()
+            rpy: self.orientation(node)?,
         };
         let mut any = false;
         for j in node
@@ -254,13 +252,84 @@ impl Mapper {
         })
     }
 
+    fn inertial(&self, node: &MjcfNode) -> Result<Inertial, ParseError> {
+        let inertia = if let Some(d) = numbers(node, "diaginertia", 3)? {
+            Some(Inertia {
+                ixx: d[0],
+                iyy: d[1],
+                izz: d[2],
+                ixy: 0.0,
+                ixz: 0.0,
+                iyz: 0.0,
+            })
+        } else {
+            // MuJoCo lists the full tensor as M11 M22 M33 M12 M13 M23.
+            numbers(node, "fullinertia", 6)?.map(|f| Inertia {
+                ixx: f[0],
+                iyy: f[1],
+                izz: f[2],
+                ixy: f[3],
+                ixz: f[4],
+                iyz: f[5],
+            })
+        };
+        let mass = numbers(node, "mass", 1)?.map(|v| v[0]);
+        Ok(Inertial {
+            mass,
+            inertia,
+            origin: Origin {
+                xyz: numbers(node, "pos", 3)?.map_or([0.0; 3], |v| [v[0], v[1], v[2]]),
+                rpy: self.orientation(node)?,
+            },
+            span: node.anchor,
+        })
+    }
+
+    /// The `rpy` of whichever orientation attribute `node` carries, in MuJoCo's priority order.
+    fn orientation(&self, node: &MjcfNode) -> Result<[f64; 3], ParseError> {
+        let bad = |key: &str| position_error(node, format!("attribute `{key}` has no direction"));
+        let matrix = if let Some(q) = numbers(node, "quat", 4)? {
+            from_quat([q[0], q[1], q[2], q[3]]).ok_or_else(|| bad("quat"))?
+        } else if let Some(a) = numbers(node, "axisangle", 4)? {
+            from_axis_angle([a[0], a[1], a[2]], a[3] * self.angle)
+                .ok_or_else(|| bad("axisangle"))?
+        } else if let Some(e) = numbers(node, "euler", 3)? {
+            self.euler(node, &e)?
+        } else if let Some(v) = numbers(node, "xyaxes", 6)? {
+            from_xyaxes([v[0], v[1], v[2]], [v[3], v[4], v[5]]).ok_or_else(|| bad("xyaxes"))?
+        } else if let Some(z) = numbers(node, "zaxis", 3)? {
+            from_zaxis([z[0], z[1], z[2]]).ok_or_else(|| bad("zaxis"))?
+        } else {
+            return Ok([0.0; 3]);
+        };
+        Ok(rpy(&matrix))
+    }
+
+    fn euler(&self, node: &MjcfNode, angles: &[f64]) -> Result<Mat, ParseError> {
+        let seq: Vec<char> = self.eulerseq.chars().collect();
+        let valid = seq.len() == 3 && seq.iter().all(|c| "xyzXYZ".contains(*c));
+        if !valid {
+            let msg = format!(
+                "compiler `eulerseq` must be three of x, y, z, found `{}`",
+                self.eulerseq
+            );
+            return Err(position_error(node, msg));
+        }
+        let mut r = about(0, 0.0);
+        for (c, angle) in seq.iter().zip(angles) {
+            let index = c.to_ascii_lowercase() as usize - 'x' as usize;
+            let turn = about(index, angle * self.angle);
+            r = if c.is_ascii_lowercase() {
+                mul(&r, &turn)
+            } else {
+                mul(&turn, &r)
+            };
+        }
+        Ok(r)
+    }
+
     fn geom(&mut self, node: &MjcfNode, link: usize) -> Result<(), ParseError> {
         let name = node.attr("name");
-        for key in ORIENTATION {
-            if node.attr(key).is_some() {
-                self.lose(key, name, node);
-            }
-        }
         let geometry = match node.attr("mesh") {
             Some(m) => match self.meshes.get(m) {
                 Some((file, scale)) => Some(Geometry::Mesh {
@@ -283,13 +352,11 @@ impl Mapper {
             Role::Both
         };
         let xyz = numbers(node, "pos", 3)?.map_or([0.0; 3], |v| [v[0], v[1], v[2]]);
+        let rpy = self.orientation(node)?;
         self.robot.links[link].shapes.push(Shape {
             role,
             geometry,
-            origin: Origin {
-                xyz,
-                ..Origin::default()
-            },
+            origin: Origin { xyz, rpy },
             span: node.anchor,
         });
         Ok(())
@@ -346,39 +413,6 @@ fn unique(base: &str, taken: &mut HashSet<String>) -> String {
     }
     taken.insert(name.clone());
     name
-}
-
-fn inertial(node: &MjcfNode) -> Result<Inertial, ParseError> {
-    let inertia = if let Some(d) = numbers(node, "diaginertia", 3)? {
-        Some(Inertia {
-            ixx: d[0],
-            iyy: d[1],
-            izz: d[2],
-            ixy: 0.0,
-            ixz: 0.0,
-            iyz: 0.0,
-        })
-    } else {
-        // MuJoCo lists the full tensor as M11 M22 M33 M12 M13 M23.
-        numbers(node, "fullinertia", 6)?.map(|f| Inertia {
-            ixx: f[0],
-            iyy: f[1],
-            izz: f[2],
-            ixy: f[3],
-            ixz: f[4],
-            iyz: f[5],
-        })
-    };
-    let mass = numbers(node, "mass", 1)?.map(|v| v[0]);
-    Ok(Inertial {
-        mass,
-        inertia,
-        origin: Origin {
-            xyz: numbers(node, "pos", 3)?.map_or([0.0; 3], |v| [v[0], v[1], v[2]]),
-            ..Origin::default()
-        },
-        span: node.anchor,
-    })
 }
 
 /// A primitive geom's shape, or `None` when the model cannot hold it (`fromto`, ellipsoid, plane,

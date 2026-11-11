@@ -8,6 +8,7 @@ mod mjcf_rules;
 mod model;
 mod physics;
 mod report;
+mod rotation;
 mod urdf;
 mod usd;
 mod usd_map;

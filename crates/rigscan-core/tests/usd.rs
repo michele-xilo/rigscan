@@ -359,14 +359,56 @@ def PhysicsFixedJoint "j"
         .map(|u| (u.what.as_str(), u.name.as_deref().unwrap()))
         .collect();
     what.sort();
-    assert_eq!(
-        what,
-        [
-            ("localRot0", "/j"),
-            ("material", "/a"),
-            ("principalAxes", "/a")
-        ]
+    assert_eq!(what, [("material", "/a"), ("principalAxes", "/a")]);
+    let half_pi = std::f64::consts::FRAC_PI_2;
+    assert!(
+        near(r.joints[0].origin.rpy[0], half_pi),
+        "{:?}",
+        r.joints[0].origin
     );
+}
+
+fn rot_joint(rot0: &str, rot1: &str) -> Robot {
+    robot(&format!(
+        r#"#usda 1.0
+def Xform "a" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {{}}
+def Xform "b" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {{}}
+def PhysicsFixedJoint "j"
+{{
+    rel physics:body0 = </a>
+    rel physics:body1 = </b>
+    {rot0}
+    {rot1}
+}}
+"#
+    ))
+}
+
+#[test]
+fn local_rot0_becomes_the_joint_origin_rpy() {
+    let r = rot_joint(
+        "quatd physics:localRot0 = (0.7071067811865476, 0, 0, 0.7071067811865476)",
+        "",
+    );
+    assert!(near(r.joints[0].origin.rpy[2], std::f64::consts::FRAC_PI_2));
+    assert!(r.unmapped.is_empty(), "{:?}", r.unmapped);
+    let r = rot_joint("quatf physics:localRot0 = (1, 0, 0, 0)", "");
+    assert_eq!(r.joints[0].origin.rpy, [0.0; 3]);
+}
+
+#[test]
+fn a_zero_local_rot0_is_listed_as_lost() {
+    let r = rot_joint("quatf physics:localRot0 = (0, 0, 0, 0)", "");
+    assert_eq!(r.joints[0].origin.rpy, [0.0; 3]);
+    let what: Vec<&str> = r.unmapped.iter().map(|u| u.what.as_str()).collect();
+    assert_eq!(what, ["localRot0"]);
+}
+
+#[test]
+fn a_turned_local_rot1_is_still_listed_as_lost() {
+    let r = rot_joint("", "quatf physics:localRot1 = (0.7071068, 0.7071068, 0, 0)");
+    let what: Vec<&str> = r.unmapped.iter().map(|u| u.what.as_str()).collect();
+    assert_eq!(what, ["localRot1"]);
 }
 
 #[test]

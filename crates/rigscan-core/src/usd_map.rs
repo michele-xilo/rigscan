@@ -3,6 +3,7 @@
 use crate::model::{
     Format, Inertia, Inertial, Joint, JointKind, Limit, Link, Origin, ParseError, Robot, Span,
 };
+use crate::rotation::{from_quat, rpy};
 use crate::usd::Usd;
 
 /// The link a joint with no `body0` or `body1` is attached to.
@@ -93,7 +94,7 @@ fn joint(j: &crate::usd::UsdJoint) -> Joint {
         kind,
         origin: Origin {
             xyz: j.local_pos0,
-            ..Origin::default()
+            rpy: joint_rpy(j.local_rot0),
         },
         limit,
         mimic: None,
@@ -101,6 +102,14 @@ fn joint(j: &crate::usd::UsdJoint) -> Joint {
         dynamics: None,
         span: Span::NONE,
     }
+}
+
+/// Most joints carry no rotation, so identity skips the trigonometry.
+fn joint_rpy(q: [f64; 4]) -> [f64; 3] {
+    if q == [1.0, 0.0, 0.0, 0.0] {
+        return [0.0; 3];
+    }
+    from_quat(q).map_or([0.0; 3], |m| rpy(&m))
 }
 
 /// `PhysicsSphericalJoint` to `spherical`; the generic `PhysicsJoint` to `joint`.

@@ -79,7 +79,7 @@ robot element is listed only when it has a finding. The CLI renders `text`, `ful
 in input order so output is deterministic. The summary line is on stderr to keep stdout equal to the findings.
 
 - `Link { name, inertial, shapes, span }`: `Inertial { mass: Option, inertia: Option<Inertia>, origin }` (`origin` is the
-  centre of mass: URDF `inertial/origin`, MJCF inertial `pos`, USD `centerOfMass`; rotations are not read yet),
+  centre of mass: URDF `inertial/origin`, MJCF inertial `pos`, USD `centerOfMass`; MJCF inertial orientation becomes `origin.rpy`),
   `Shape { role, geometry, origin, span }` from URDF `<visual>`/`<collision>` and MJCF geoms: `Geometry` is box, sphere,
   cylinder, capsule (full extents; MJCF half sizes are doubled) or mesh with scale; `span` is the geometry element.
   `Link::meshes()` yields the mesh files and spans for RS014. An MJCF geom is `Both` unless `contype` and
@@ -95,7 +95,7 @@ in input order so output is deterministic. The summary line is on stderr to keep
   attribute (`inertia` fields, `mesh filename`) is a `ParseError` prefixed with
   `line:col:`. A scan stops at the first one. If users want all problems
   reported at once, make these findings instead.
-- Not yet: USD shapes, MJCF ellipsoid/plane/hfield/sdf/`fromto` geoms, actuators, rotations (MJCF orientation, USD `localRot`), `metersPerUnit`.
+- Not yet: USD shapes, MJCF ellipsoid/plane/hfield/sdf/`fromto` geoms, MJCF joint `pos`, actuators, `metersPerUnit`.
 
 Known risk for #11: an MJCF body can have several joints to its parent, or
 none. The model has one parent/child edge per joint, so RS004 would flag
@@ -128,8 +128,7 @@ origin. A body without `<inertial>` has no inertial because MuJoCo infers it fro
 mesh `Shape`s joined with `meshdir`, with the asset's `scale`.
 
 `Robot.unmapped` lists what the model cannot hold, with name and span, for the loss report (#18): actuators,
-tendons, equality constraints, contacts, sensors, keyframes, geoms that are not a box, sphere, cylinder, capsule or mesh (or use `fromto`), body and geom orientation (`quat`, `euler`,
-`axisangle`, `xyaxes`, `zaxis`; rotation is not converted, so `rpy` stays zero) and anything inside `frame`,
+tendons, equality constraints, contacts, sensors, keyframes, geoms that are not a box, sphere, cylinder, capsule or mesh (or use `fromto`) and anything inside `frame`,
 `replicate`, `attach`, `composite` or `flexcomp`, which are not expanded.
 The URDF reader fills it too: each direct child of `<robot>`, `<link>`, `<joint>` or `<inertial>` that it does not read
 (`material`, `transmission`, `gazebo`, `safety_controller`, `calibration`, `visual/material`, `collision/material`, unknown tags).
@@ -165,7 +164,7 @@ applied). A mass or diagonal inertia of zero means "computed from shapes" in USD
 
 USD has no source positions, so every span is `Span::NONE` (line 0): the CLI prints the file path alone in `text`,
 `full` and `report`, and JSON `line` and `column` are `null`. `Robot.unmapped` lists scenes, collision shapes, drives,
-materials, `principalAxes` and a non-identity `localRot0`/`localRot1`. The CLI's `FsUsdLoader` records the layers
+materials, `principalAxes`, a non-identity `localRot1` and a `localRot0` that is not a usable quaternion. The CLI's `FsUsdLoader` records the layers
 read, and a directory scan drops a file that another scanned file pulled in, like MJCF includes.
 
 `openusd` is MIT except `core_schemas.rs`, under the Tomorrow Open Source Technology License 1.0 (Apache-2.0 with a

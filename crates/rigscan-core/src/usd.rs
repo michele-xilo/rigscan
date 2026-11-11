@@ -38,6 +38,8 @@ pub struct UsdJoint {
     pub body0: Option<String>,
     pub body1: Option<String>,
     pub local_pos0: [f64; 3],
+    /// `physics:localRot0` as w, x, y, z; identity when absent or not a usable quaternion.
+    pub local_rot0: [f64; 4],
     /// Unit vector of `physics:axis` (`X`, `Y` or `Z`, default `X`); only revolute and prismatic joints use it.
     pub axis: [f64; 3],
     /// As authored: degrees for a revolute joint, stage units for a prismatic one.
@@ -267,12 +269,18 @@ fn prim_data(
                 targets.push(t.clone());
             }
         }
+        let rot0 = attr("physics:localRot0");
+        let local_rot0 = rot0.as_ref().and_then(quat).unwrap_or([1.0, 0.0, 0.0, 0.0]);
+        if rot0.is_some_and(|q| quat(&q).is_none()) {
+            lose(usd, "localRot0", path);
+        }
         usd.joints.push(UsdJoint {
             path: path.to_string(),
             type_name: ty.clone(),
             body0,
             body1,
             local_pos0: attr("physics:localPos0").and_then(vec3).unwrap_or([0.0; 3]),
+            local_rot0,
             axis: attr("physics:axis")
                 .and_then(axis)
                 .unwrap_or([1.0, 0.0, 0.0]),
@@ -283,10 +291,8 @@ fn prim_data(
                 .and_then(number)
                 .filter(|v| v.is_finite()),
         });
-        for rot in ["physics:localRot0", "physics:localRot1"] {
-            if attr(rot).is_some_and(|q| !is_identity(&q)) {
-                lose(usd, &rot["physics:".len()..], path);
-            }
+        if attr("physics:localRot1").is_some_and(|q| !is_identity(&q)) {
+            lose(usd, "localRot1", path);
         }
     }
     if ty == "PhysicsScene" {
@@ -343,6 +349,16 @@ fn vec3(v: Value) -> Option<[f64; 3]> {
         Value::Vec3d(v) => Some([v.x, v.y, v.z]),
         _ => None,
     }
+}
+
+/// A non-zero quaternion as w, x, y, z.
+fn quat(v: &Value) -> Option<[f64; 4]> {
+    let q = match v {
+        Value::Quatf(q) => [q.w, q.x, q.y, q.z].map(f64::from),
+        Value::Quatd(q) => [q.w, q.x, q.y, q.z],
+        _ => return None,
+    };
+    (q.iter().any(|c| *c != 0.0) && q.iter().all(|c| c.is_finite())).then_some(q)
 }
 
 /// Anything but a quaternion is not a rotation we recognise, and counts as not identity.

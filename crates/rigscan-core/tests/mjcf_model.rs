@@ -246,7 +246,7 @@ fn mesh_geoms_become_mesh_refs_joined_with_meshdir() {
 fn unmapped_parts_are_kept_with_name_and_span() {
     let r = robot(
         r#"<mujoco>
-  <worldbody><body name="a" quat="1 0 0 0"><joint name="j"/><geom name="g" type="ellipsoid" size="1 1 1"/></body></worldbody>
+  <worldbody><body name="a"><joint name="j"/><geom name="g" type="ellipsoid" size="1 1 1"/></body></worldbody>
   <actuator><motor name="m" joint="j"/></actuator>
   <tendon><fixed name="t"/></tendon>
 </mujoco>"#,
@@ -256,7 +256,6 @@ fn unmapped_parts_are_kept_with_name_and_span() {
         .iter()
         .map(|u| (u.what.as_str(), u.name.as_deref(), u.span.line))
         .collect();
-    assert!(got.contains(&("quat", Some("a"), 2)), "{got:?}");
     assert!(got.contains(&("geom", Some("g"), 2)), "{got:?}");
     assert!(got.contains(&("motor", Some("m"), 3)), "{got:?}");
     assert!(got.contains(&("fixed", Some("t"), 4)), "{got:?}");
@@ -551,20 +550,6 @@ fn geoms_the_model_cannot_hold_stay_unmapped() {
 }
 
 #[test]
-fn geom_orientation_is_recorded_as_lost_and_the_shape_kept() {
-    let r = robot(
-        "<mujoco><worldbody><body name=\"a\"><geom name=\"g\" size=\"1\" euler=\"0 0 90\"/></body></worldbody></mujoco>",
-    );
-    assert_eq!(r.links[1].shapes.len(), 1);
-    let lost: Vec<_> = r
-        .unmapped
-        .iter()
-        .map(|u| (u.what.as_str(), u.name.as_deref()))
-        .collect();
-    assert_eq!(lost, [("euler", Some("g"))]);
-}
-
-#[test]
 fn invalid_geom_numbers_are_parse_errors_naming_the_position() {
     for geom in ["<geom size=\"x\"/>", "<geom size=\"1\" pos=\"1 2\"/>"] {
         let src = format!("<mujoco><worldbody>{geom}</worldbody></mujoco>");
@@ -582,4 +567,92 @@ fn a_bad_mesh_scale_is_a_parse_error() {
     let src = "<mujoco><asset><mesh name=\"m\" file=\"m.stl\" scale=\"1 2\"/></asset><worldbody/></mujoco>";
     let err = parse_mjcf(src, &NoFiles).unwrap().to_robot().unwrap_err().0;
     assert!(err.starts_with("1:") && err.contains("scale"), "{err}");
+}
+
+fn body_rpy(attrs: &str, compiler: &str) -> [f64; 3] {
+    let src = format!(
+        "<mujoco>{compiler}<worldbody><body name=\"a\" {attrs}><joint name=\"j\"/></body></worldbody></mujoco>"
+    );
+    robot(&src).joints[0].origin.rpy
+}
+
+fn assert_rpy(got: [f64; 3], want: [f64; 3]) {
+    for i in 0..3 {
+        assert!((got[i] - want[i]).abs() < 1e-6, "{got:?} != {want:?}");
+    }
+}
+
+const HALF_PI: f64 = std::f64::consts::FRAC_PI_2;
+
+#[test]
+fn body_orientation_becomes_the_joint_rpy() {
+    let s = std::f64::consts::FRAC_1_SQRT_2;
+    assert_rpy(body_rpy("quat=\"1 0 0 0\"", ""), [0.0; 3]);
+    assert_rpy(
+        body_rpy(&format!("quat=\"{s} 0 0 {s}\""), ""),
+        [0.0, 0.0, HALF_PI],
+    );
+    assert_rpy(body_rpy("axisangle=\"1 0 0 90\"", ""), [HALF_PI, 0.0, 0.0]);
+    assert_rpy(body_rpy("euler=\"0 0 90\"", ""), [0.0, 0.0, HALF_PI]);
+    assert_rpy(body_rpy("xyaxes=\"0 1 0 -1 0 0\"", ""), [0.0, 0.0, HALF_PI]);
+    assert_rpy(body_rpy("zaxis=\"1 0 0\"", ""), [0.0, HALF_PI, 0.0]);
+}
+
+#[test]
+fn a_quaternion_is_normalised_and_a_rotation_past_gimbal_lock_keeps_its_matrix() {
+    assert_rpy(body_rpy("quat=\"2 0 0 0\"", ""), [0.0; 3]);
+    assert_rpy(
+        body_rpy("zaxis=\"0 0 -1\"", ""),
+        [std::f64::consts::PI, 0.0, 0.0],
+    );
+}
+
+#[test]
+fn euler_follows_the_compiler_sequence_and_angle_unit() {
+    assert_rpy(body_rpy("euler=\"90 0 90\"", ""), [0.0, -HALF_PI, HALF_PI]);
+    assert_rpy(
+        body_rpy("euler=\"90 0 90\"", "<compiler eulerseq=\"XYZ\"/>"),
+        [HALF_PI, 0.0, HALF_PI],
+    );
+    assert_rpy(
+        body_rpy(
+            "euler=\"0 0 1.5707963267948966\"",
+            "<compiler angle=\"radian\"/>",
+        ),
+        [0.0, 0.0, HALF_PI],
+    );
+}
+
+#[test]
+fn geom_and_inertial_orientation_become_their_origin_rpy() {
+    let r = robot(
+        "<mujoco><worldbody><body name=\"a\"><inertial pos=\"0 0 0\" mass=\"1\" diaginertia=\"1 1 1\" euler=\"0 0 90\"/>\
+         <geom size=\"1\" axisangle=\"0 1 0 90\"/></body></worldbody></mujoco>",
+    );
+    assert_rpy(
+        r.links[1].inertial.as_ref().unwrap().origin.rpy,
+        [0.0, 0.0, HALF_PI],
+    );
+    assert_rpy(r.links[1].shapes[0].origin.rpy, [0.0, HALF_PI, 0.0]);
+    assert!(r.unmapped.is_empty(), "{:?}", r.unmapped);
+}
+
+#[test]
+fn invalid_orientation_is_a_parse_error() {
+    for attrs in [
+        "quat=\"0 0 0 0\"",
+        "quat=\"1 0 0\"",
+        "axisangle=\"0 0 0 90\"",
+        "euler=\"0 0\"",
+        "xyaxes=\"1 0 0 2 0 0\"",
+        "zaxis=\"0 0 0\"",
+    ] {
+        let src = format!(
+            "<mujoco><worldbody><body name=\"a\" {attrs}><joint name=\"j\"/></body></worldbody></mujoco>"
+        );
+        let err = parse_mjcf(&src, &NoFiles).unwrap().to_robot();
+        assert!(err.is_err(), "{attrs}");
+    }
+    let bad_seq = "<mujoco><compiler eulerseq=\"xxq\"/><worldbody><body name=\"a\" euler=\"1 2 3\"><joint name=\"j\"/></body></worldbody></mujoco>";
+    assert!(parse_mjcf(bad_seq, &NoFiles).unwrap().to_robot().is_err());
 }

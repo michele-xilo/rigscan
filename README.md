@@ -1,11 +1,6 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
-    <img src="assets/logo.svg" alt="Rigscan: a robot inside a scanner frame" width="160">
-  </picture>
+  <img src="assets/logo.svg" alt="Rigscan" width="360">
 </p>
-
-<h1 align="center">Rigscan</h1>
 
 <p align="center"><b>A health check for robot descriptions.</b></p>
 

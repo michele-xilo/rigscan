@@ -3,6 +3,11 @@ import { createRig } from './rig.js';
 
 const $ = (id) => document.getElementById(id);
 const READ = /\.(urdf|xml|usd|usda|usdc)$/i;
+// STL and OBJ are drawn, so their bytes are kept in the page. The other formats are only named, so a
+// reference to one resolves and the view can say it was not drawn.
+const DRAWN = /\.(stl|obj)$/i;
+const NAMED = /\.(dae|glb|gltf|ply|fbx|3ds)$/i;
+const EMPTY = new Uint8Array(0);
 const WORD = { healthy: 'healthy', warning: 'warning', critical: 'critical' };
 
 let files = new Map(); // path -> Uint8Array
@@ -23,9 +28,18 @@ function setStatus(text, error = false) {
   s.classList.toggle('error', error);
 }
 
+function meshNote({ drawn, missing, unsupported, failed }) {
+  const parts = [];
+  if (drawn) parts.push(`${drawn} mesh${drawn === 1 ? '' : 'es'} drawn`);
+  if (missing) parts.push(`${missing} not found among the dropped files`);
+  if (unsupported) parts.push(`${unsupported} in a format that is not drawn (only STL and OBJ are)`);
+  if (failed) parts.push(`${failed} could not be read`);
+  $('rig-meshes').textContent = parts.join(', ');
+}
+
 async function start() {
   try {
-    rig = createRig($('rig'), (sel) => select(sel, '3d'));
+    rig = createRig($('rig'), (sel) => select(sel, '3d'), meshNote);
   } catch {
     // No WebGL: the tree, findings and source still work.
     document.querySelector('section.rig').hidden = true;
@@ -46,7 +60,8 @@ async function fromList(list) {
   const out = new Map();
   for (const f of list) {
     const path = f.webkitRelativePath || f.name;
-    if (READ.test(path)) out.set(path, new Uint8Array(await f.arrayBuffer()));
+    if (READ.test(path) || DRAWN.test(path)) out.set(path, new Uint8Array(await f.arrayBuffer()));
+    else if (NAMED.test(path)) out.set(path, EMPTY);
   }
   return out;
 }
@@ -59,7 +74,8 @@ async function fromDrop(dt) {
   const walk = async (entry) => {
     if (entry.isFile) {
       const path = entry.fullPath.replace(/^\//, '');
-      if (!READ.test(path)) return;
+      if (NAMED.test(path)) return void out.set(path, EMPTY);
+      if (!READ.test(path) && !DRAWN.test(path)) return;
       const file = await new Promise((ok, fail) => entry.file(ok, fail));
       out.set(path, new Uint8Array(await file.arrayBuffer()));
       return;
@@ -80,7 +96,7 @@ function isMjcf(bytes) {
 }
 
 function candidates() {
-  return [...files.keys()].filter((p) => !/\.xml$/i.test(p) || isMjcf(files.get(p)));
+  return [...files.keys()].filter((p) => READ.test(p) && (!/\.xml$/i.test(p) || isMjcf(files.get(p))));
 }
 
 function load(map) {
@@ -106,7 +122,7 @@ function run(main) {
   if (!ready) return setStatus('Rigscan is still loading.', true);
   const paths = [...files.keys()];
   const started = performance.now();
-  const out = JSON.parse(scan_files(main, paths, paths.map((p) => files.get(p))));
+  const out = JSON.parse(scan_files(main, paths, paths.map((p) => (READ.test(p) ? files.get(p) : EMPTY))));
   const ms = performance.now() - started;
   if (out.error) {
     result = null;
@@ -137,7 +153,7 @@ function draw() {
   drawFindings();
   drawUnmapped();
   drawSource();
-  rig?.show(result);
+  rig?.show(result, files);
   select(null);
 }
 

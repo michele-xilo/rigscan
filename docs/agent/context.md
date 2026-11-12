@@ -211,9 +211,13 @@ line. Probes for MJCF rules are `.xml` files in `scripts/compare/probes/`; only 
 natively) and a `wasm-bindgen` shim `scan_files(main, paths, files)` that returns it as a JSON string. Files come
 from the dropped set: an MJCF `include` or a USD layer resolves against it (relative to the including file), a
 missing one is a finding, and mesh files are never reported missing (RS014 cannot fire, the resolver answers
-`Unknown`). The JSON (`version` 1) has `path`, `format`, `robot`, `verdict`, `links` and `joints` with `status` (a joint also has `origin` and `axis`),
+`Unknown`; an absent mesh in the dropped set proves nothing). Each link lists its `shapes` (role, `type`, sizes, `origin`);
+a mesh shape has `filename`, `scale` and `resolved`, the dropped file it points at or null (`package://` and `file://`
+stripped, then relative to the robot file, then the longest path suffix a dropped file ends with). The page passes mesh
+names with empty contents, and keeps STL and OBJ bytes in JS. The JSON (`version` 1) has `path`, `format`, `robot`, `verdict`, `links` and `joints` with `status` (a joint also has `origin` and `axis`),
 `findings`, `unmapped` and `source`; a file that cannot be scanned gives `{ path, error }`. `web/` is a static page
-(no bundler) that draws it, and `web/rig.js` draws the 3D skeleton with three.js (a pinned jsDelivr import map; forward
+(no bundler) that draws it, and `web/rig.js` draws the 3D skeleton, primitives and STL/OBJ meshes (one parsed per task so the page stays responsive;
+COLLADA and glTF are not drawn) with three.js (a pinned jsDelivr import map; forward
 kinematics from the joint origins, Z up); `scripts/build-web.sh` builds the `wasm` cargo profile (size-optimised, defined in the
 workspace `Cargo.toml`), runs `wasm-bindgen` and copies the logo and sample into `web/`. The Pages workflow
 deploys it from `main`.

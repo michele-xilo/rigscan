@@ -134,35 +134,48 @@ fn describe(
 }
 
 fn shape(s: &Shape, files: &Files, main: &str) -> Value {
-    let mut v = match &s.geometry {
-        Geometry::Box { size } => json!({ "type": "box", "size": size }),
-        Geometry::Sphere { radius } => json!({ "type": "sphere", "radius": radius }),
-        Geometry::Cylinder { radius, length } => {
-            json!({ "type": "cylinder", "radius": radius, "length": length })
-        }
-        Geometry::Capsule { radius, length } => {
-            json!({ "type": "capsule", "radius": radius, "length": length })
-        }
-        Geometry::Mesh { filename, scale } => json!({
-            "type": "mesh",
-            "filename": filename,
-            "scale": scale,
-            "resolved": resolve_mesh(filename, files, dir_of(main)),
-        }),
+    let geometry: Vec<(&str, Value)> = match &s.geometry {
+        Geometry::Box { size } => vec![("type", json!("box")), ("size", json!(size))],
+        Geometry::Sphere { radius } => vec![("type", json!("sphere")), ("radius", json!(radius))],
+        Geometry::Cylinder { radius, length } => vec![
+            ("type", json!("cylinder")),
+            ("radius", json!(radius)),
+            ("length", json!(length)),
+        ],
+        Geometry::Capsule { radius, length } => vec![
+            ("type", json!("capsule")),
+            ("radius", json!(radius)),
+            ("length", json!(length)),
+        ],
+        Geometry::Mesh { filename, scale } => vec![
+            ("type", json!("mesh")),
+            ("filename", json!(filename)),
+            ("scale", json!(scale)),
+            (
+                "resolved",
+                json!(resolve_mesh(filename, files, dir_of(main))),
+            ),
+        ],
     };
-    if let Value::Object(m) = &mut v {
-        let role = match s.role {
-            Role::Visual => "visual",
-            Role::Collision => "collision",
-            Role::Both => "both",
-        };
-        m.insert("role".into(), json!(role));
-        m.insert(
-            "origin".into(),
+    let role = match s.role {
+        Role::Visual => "visual",
+        Role::Collision => "collision",
+        Role::Both => "both",
+    };
+    let common = [
+        ("role", json!(role)),
+        (
+            "origin",
             json!({ "xyz": s.origin.xyz, "rpy": s.origin.rpy }),
-        );
-    }
-    v
+        ),
+    ];
+    Value::Object(
+        geometry
+            .into_iter()
+            .chain(common)
+            .map(|(k, v)| (k.to_string(), v))
+            .collect(),
+    )
 }
 
 /// The dropped file a mesh reference points at. ROS `package://name/...` cannot be resolved without

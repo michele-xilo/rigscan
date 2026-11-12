@@ -20,12 +20,12 @@ body = html.escape(out.rstrip())
 body = re.sub(r"\x1b\[(\d+)m", lambda m: "</span>" if m[1] == "0" else f'<span style="color:{COLOURS[m[1]]}">', body)
 lines = out.count("\n") + 3
 page = f"""<!doctype html><meta charset="utf-8"><style>
-html,body{{margin:0;background:#F3EFE6}}
-.t{{margin:28px;background:#14202E;color:#F3EFE6;border-radius:14px;overflow:hidden;width:1180px;
-box-shadow:0 8px 24px #14202E33;font:500 17px/1.45 ui-monospace,"SF Mono",Menlo,monospace}}
-.b{{height:34px;background:#1d2d3f;display:flex;gap:8px;align-items:center;padding-left:16px}}
-.b i{{width:12px;height:12px;border-radius:50%;background:#3d4f63;display:block}}
-pre{{margin:0;padding:18px 24px 22px;white-space:pre}}.p{{color:#8a97a6}}
+html,body{{margin:0;background:#0B0B0C}}
+.t{{margin:28px;background:#131316;color:#EDEDF0;border:1px solid #26262B;border-radius:14px;overflow:hidden;width:1180px;
+font:500 17px/1.45 ui-monospace,"SF Mono",Menlo,monospace}}
+.b{{height:34px;background:#1a1a1e;display:flex;gap:8px;align-items:center;padding-left:16px}}
+.b i{{width:12px;height:12px;border-radius:50%;background:#3a3a42;display:block}}
+pre{{margin:0;padding:18px 24px 22px;white-space:pre}}.p{{color:#a1a1aa}}
 </style><div class="t"><div class="b"><i></i><i></i><i></i></div>
 <pre><span class="p">$</span> rigscan scan examples/broken_arm.urdf
 

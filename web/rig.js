@@ -93,8 +93,6 @@ export function createRig(canvas, onPick, onMeshes) {
   let pickable = [];
   let anchors = new Map(); // "link name" or "joint name" -> world position
   let radius = 1;
-  let last = null;
-  let lastFiles = null;
   let linkMaterials = new Map(); // link name -> { material, base }
   let touched = false;
   let token = 0;
@@ -173,8 +171,6 @@ export function createRig(canvas, onPick, onMeshes) {
   }
 
   function show(result, files) {
-    last = result;
-    lastFiles = files;
     touched = false;
     clear();
     const mine = token;
@@ -290,9 +286,6 @@ export function createRig(canvas, onPick, onMeshes) {
     const hit = ray.intersectObjects(pickable, true)[0];
     onPick(hit ? hit.object.userData : null);
   });
-
-  // Colours come from the page theme, so a light/dark switch redraws.
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => last && show(last, lastFiles));
 
   return { show, highlight };
 }

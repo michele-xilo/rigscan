@@ -1,30 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 380" width="400" height="380" role="img" aria-label="Rigscan: a robot inside a scanner frame, a pulse line across its visor" fill="none" stroke="#14202E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 160" width="480" height="160" role="img" aria-label="Rigscan">
 <title>Rigscan</title>
-<rect width="400" height="380" rx="28" fill="#F3EFE6" stroke="none"/>
-<g stroke="#2F5BEA" stroke-width="3.4">
-<path d="M52 92V56Q52 44 64 44H100M300 44H336Q348 44 348 56V92M348 288V324Q348 336 336 336H300M100 336H64Q52 336 52 324V288"/>
+<rect width="480" height="160" rx="24" fill="#0B0B0C"/>
+<g transform="translate(40 40) scale(1.25)">
+<path d="M6 20V10Q6 6 10 6H20M44 6H54Q58 6 58 10V20M58 44V54Q58 58 54 58H44M20 58H10Q6 58 6 54V44" fill="none" stroke="#EDEDF0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M20 46L31 28L45 38" fill="none" stroke="#EDEDF0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="20" cy="46" r="4.2" fill="#0B0B0C" stroke="#EDEDF0" stroke-width="3"/>
+<circle cx="31" cy="28" r="4.2" fill="#0B0B0C" stroke="#EDEDF0" stroke-width="3"/>
+<circle cx="45" cy="38" r="4.2" fill="#0B0B0C" stroke="#EDEDF0" stroke-width="3"/>
 </g>
-<path d="M52 200H348" stroke="#2F5BEA" stroke-width="1.8" stroke-dasharray="3 7" opacity=".8"/>
-<g fill="#F3EFE6">
-<path d="M126 318Q126 304 142 304H258Q274 304 274 318V336H126Z"/>
-<rect x="84" y="224" width="26" height="72" rx="12"/>
-<rect x="290" y="224" width="26" height="72" rx="12"/>
-<rect x="122" y="208" width="156" height="104" rx="26"/>
-<rect x="178" y="184" width="44" height="30" rx="6"/>
-<rect x="98" y="116" width="20" height="46" rx="7"/>
-<rect x="282" y="116" width="20" height="46" rx="7"/>
-<rect x="118" y="66" width="164" height="126" rx="32"/>
-</g>
-<path d="M200 66V44" stroke-width="2.4"/>
-<circle cx="200" cy="36" r="8" fill="#2F5BEA"/>
-<rect x="140" y="104" width="120" height="50" rx="25" fill="#14202E"/>
-<path d="M154 130H178L186 112L198 146L210 120L216 130H246" stroke="#F3EFE6" stroke-width="3"/>
-<path d="M180 172Q200 180 220 172"/>
-<rect x="164" y="232" width="72" height="44" rx="12"/>
-<g stroke="none">
-<circle cx="184" cy="254" r="7" fill="#1F9D8F"/>
-<circle cx="200" cy="254" r="7" fill="#D99A1E"/>
-<circle cx="216" cy="254" r="7" fill="#C8372D"/>
-</g>
-<path d="M146 296H254" stroke-width="1.4" opacity=".5"/>
+<text x="140" y="97" fill="#EDEDF0" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="58" font-weight="700" letter-spacing="-3">rigscan</text>
 </svg>

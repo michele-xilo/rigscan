@@ -303,25 +303,29 @@ def speed_table(goldens):
 
 
 def summary_table(goldens):
-    """The short table for the README: formats read, checks caught and load time on the largest rig."""
+    """The short table for the README: formats read, checks caught and load time on the largest rig.
+
+    MuJoCo is left out: it is a simulator, so a comparison on load time and checks says little about it.
+    """
     v = goldens["versions"]
     cells = coverage_cells(goldens)
     rules = [k for k in cells if k != "parse"]
-    caught = [sum(cells[k][i] == "yes" for k in rules) for i in range(4)]
+    column = {"rigscan": 0, **{tool: 1 + TOOLS.index(tool) for tool in SPEED_TOOLS}}
+    caught = {who: sum(cells[k][i] == "yes" for k in rules) for who, i in column.items()}
     big = goldens["speed"]["rigs"][-1]
     t = times(big)
-    best = max(caught)
-    head = f"| | Rigscan | MuJoCo {v['mujoco']} | Pinocchio {v['pinocchio']} | yourdfpy {v['yourdfpy']} |"
-    rows = [head, "|---|:-:|:-:|:-:|:-:|"]
+    best = max(caught.values())
+    head = f"| | Rigscan | Pinocchio {v['pinocchio']} | yourdfpy {v['yourdfpy']} |"
+    rows = [head, "|---|:-:|:-:|:-:|"]
     for label, suffixes in [("Reads URDF", {".urdf"}), ("Reads MJCF", {".xml"}), ("Reads USD (UsdPhysics)", {".usda"})]:
-        rows.append(f"| {label} | {TICK} | " + " | ".join(TICK if suffixes <= READS[tool] else CROSS for tool in TOOLS) + " |")
-    caught_cells = [f"{n} of {len(rules)}" + (f" {TROPHY}" if n == best else "") for n in caught]
+        rows.append(f"| {label} | {TICK} | " + " | ".join(TICK if suffixes <= READS[tool] else CROSS for tool in SPEED_TOOLS) + " |")
+    caught_cells = [f"{n} of {len(rules)}" + (f" {TROPHY}" if n == best else "") for n in caught.values()]
     rows.append("| Broken-robot checks flagged | " + " | ".join(caught_cells) + " |")
-    load = [f"{t['rigscan']:.2f} ms {TROPHY}", NA] + [f"{t[x]:.2f} ms" if x in t else CROSS for x in SPEED_TOOLS]
+    load = [f"{t['rigscan']:.2f} ms {TROPHY}"] + [f"{t[x]:.2f} ms" if x in t else CROSS for x in SPEED_TOOLS]
     rows.append(f"| Load time, `{big['rig']}` ({big['kib']} KiB) | " + " | ".join(load) + " |")
-    slower = ["1x", NA] + [f"{t[x] / t['rigscan']:.0f}x slower" if x in t else NA for x in SPEED_TOOLS]
-    rows.append("| Time compared with Rigscan | " + " | ".join(slower) + " |")
-    legend = f"{TICK} yes  {CROSS} no  {TROPHY} best  {NA} not measured. The tools are loaders, not linters; see [docs/comparison.md](docs/comparison.md) for each check and each rig."
+    faster = [""] + [f"{t[x] / t['rigscan']:.0f}x" if x in t else NA for x in SPEED_TOOLS]
+    rows.append("| Rigscan is faster by | " + " | ".join(faster) + " |")
+    legend = f"{TICK} yes  {CROSS} no  {TROPHY} best. The tools are loaders, not linters; [docs/comparison.md](docs/comparison.md) has each check and each rig, and MuJoCo."
     return "\n".join(rows) + f"\n\n{legend}"
 
 

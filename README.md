@@ -13,6 +13,8 @@
 
 [![build](https://github.com/michele-xilo/rigscan/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/michele-xilo/rigscan/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/michele-xilo/rigscan/branch/main/graph/badge.svg)](https://codecov.io/gh/michele-xilo/rigscan)
+![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)
+![Rust](https://img.shields.io/badge/rust-stable-orange?logo=rust)
 
 </p>
 
@@ -57,16 +59,16 @@ Every option and output format (`text`, `full`, `report`, `json`) is in [docs/us
 - **Made for CI.** Stable rule IDs, exit codes, JSON output and deterministic, sorted findings.
 
 <!-- compare:summary:start -->
-| | Rigscan | MuJoCo 4.0.0 | Pinocchio 4.1.0 | yourdfpy 0.0.60 |
-|---|:-:|:-:|:-:|:-:|
-| Reads URDF | ✅ | ✅ | ✅ | ✅ |
-| Reads MJCF | ✅ | ✅ | ❌ | ❌ |
-| Reads USD (UsdPhysics) | ✅ | ❌ | ❌ | ❌ |
-| Broken-robot checks flagged | 22 of 22 🏆 | 12 of 22 | 8 of 22 | 1 of 22 |
-| Load time, `talos_full_v2` (107 KiB) | 0.49 ms 🏆 | ➖ | 1.62 ms | 4.29 ms |
-| Time compared with Rigscan | 1x | ➖ | 3x slower | 9x slower |
+| | Rigscan | Pinocchio 4.1.0 | yourdfpy 0.0.60 |
+|---|:-:|:-:|:-:|
+| Reads URDF | ✅ | ✅ | ✅ |
+| Reads MJCF | ✅ | ❌ | ❌ |
+| Reads USD (UsdPhysics) | ✅ | ❌ | ❌ |
+| Broken-robot checks flagged | 22 of 22 🏆 | 8 of 22 | 1 of 22 |
+| Load time, `talos_full_v2` (107 KiB) | 0.49 ms 🏆 | 1.62 ms | 4.29 ms |
+| Rigscan is faster by |  | 3x | 9x |
 
-✅ yes  ❌ no  🏆 best  ➖ not measured. The tools are loaders, not linters; see [docs/comparison.md](docs/comparison.md) for each check and each rig.
+✅ yes  ❌ no  🏆 best. The tools are loaders, not linters; [docs/comparison.md](docs/comparison.md) has each check and each rig, and MuJoCo.
 <!-- compare:summary:end -->
 
 ## What is supported

@@ -7,6 +7,12 @@
 <meta name="description" content="Drop a URDF, MJCF or USD robot and see its health in the browser. Runs Rigscan as WebAssembly; nothing is uploaded.">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
 </head>
 <body>
 <header>
@@ -41,6 +47,11 @@
       <p id="summary"></p>
     </section>
     <div class="grid">
+      <section class="rig" aria-labelledby="rig-title">
+        <h2 id="rig-title">3D view</h2>
+        <canvas id="rig" role="img" aria-label="3D view of the robot's links and joints. The kinematic tree below has the same elements and works with the keyboard."></canvas>
+        <p class="note">Drag to orbit, right-drag to pan, scroll to zoom. Click a sphere (link) or a line (joint) to select it. Arrows are joint axes.</p>
+      </section>
       <section aria-labelledby="tree-title">
         <h2 id="tree-title">Kinematic tree</h2>
         <ul id="tree" class="tree" role="tree"></ul>

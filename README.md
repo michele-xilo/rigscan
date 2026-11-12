@@ -38,8 +38,8 @@ Every option and output format (`text`, `full`, `report`, `json`) is in [docs/us
 ## Try it in your browser
 
 The [viewer](https://michele-xilo.github.io/rigscan/) runs Rigscan as WebAssembly: drop a URDF, MJCF or USD file (or a
-folder) and see the kinematic tree coloured by health, the findings, and the source line each one points at. Nothing
-is uploaded. It is also the test of the WebAssembly build.
+folder) and see the robot in 3D, the kinematic tree coloured by health, the findings, and the source line each one
+points at. Nothing is uploaded. It is also the test of the WebAssembly build.
 
 ## What it catches
 
@@ -86,7 +86,7 @@ is uploaded. It is also the test of the WebAssembly build.
 | USD (UsdPhysics) | yes | yes | planned |
 
 The library (`rigscan-core`) compiles for WebAssembly and powers the browser viewer; the CLI is the other surface. A
-Python wheel, a 3D view in the viewer, SARIF output and URDF/MJCF/USD conversion with a report of what each conversion loses are on the
+Python wheel, geometry and joint sliders in the viewer, SARIF output and URDF/MJCF/USD conversion with a report of what each conversion loses are on the
 [roadmap](https://github.com/michele-xilo/rigscan/issues).
 
 ## More

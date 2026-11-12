@@ -43,7 +43,9 @@ select { font: inherit; padding: 4px 8px; background: var(--paper); color: var(-
 .pill.warning { background: var(--warning-bg); color: var(--warning); }
 .pill.critical { background: var(--critical-bg); color: var(--critical); }
 .grid { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
-.grid .source { grid-column: 1 / -1; }
+.grid .source, .grid .rig { grid-column: 1 / -1; }
+#rig { display: block; width: 100%; height: 360px; border-radius: 10px; background: var(--paper); touch-action: none; }
+.rig .note { margin: 8px 0 0 !important; }
 @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
 .grid > section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin: 0; min-width: 0; }
 ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 20px; border-left: 1px solid var(--line); }

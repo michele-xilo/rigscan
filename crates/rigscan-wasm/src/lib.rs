@@ -99,6 +99,8 @@ fn describe(
                 "kind": kind(&j.kind),
                 "parent": j.parent,
                 "child": j.child,
+                "origin": { "xyz": j.origin.xyz, "rpy": j.origin.rpy },
+                "axis": j.axis,
                 "status": status(*s),
                 "line": line,
                 "column": column,

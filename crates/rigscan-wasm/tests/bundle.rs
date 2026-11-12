@@ -235,3 +235,29 @@ fn what_the_model_cannot_hold_is_listed_with_its_position() {
         (Some("gazebo"), Some(3))
     );
 }
+
+#[test]
+fn a_joint_carries_its_origin_and_axis_for_the_3d_view() {
+    let urdf = r#"<robot name="t">
+  <link name="a"/>
+  <link name="b"/>
+  <link name="c"/>
+  <joint name="j1" type="revolute"><parent link="a"/><child link="b"/><origin xyz="0.1 0.2 0.3" rpy="0.4 0.5 0.6"/><axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j2" type="fixed"><parent link="b"/><child link="c"/></joint>
+</robot>"#;
+    let v = scan("t.urdf", &[("t.urdf", urdf)]);
+    assert_eq!(
+        v["joints"][0]["origin"]["xyz"],
+        serde_json::json!([0.1, 0.2, 0.3])
+    );
+    assert_eq!(
+        v["joints"][0]["origin"]["rpy"],
+        serde_json::json!([0.4, 0.5, 0.6])
+    );
+    assert_eq!(v["joints"][0]["axis"], serde_json::json!([0.0, 1.0, 0.0]));
+    assert_eq!(
+        v["joints"][1]["origin"]["xyz"],
+        serde_json::json!([0.0, 0.0, 0.0])
+    );
+    assert_eq!(v["joints"][1]["axis"], Value::Null);
+}

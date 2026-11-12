@@ -261,3 +261,92 @@ fn a_joint_carries_its_origin_and_axis_for_the_3d_view() {
     );
     assert_eq!(v["joints"][1]["axis"], Value::Null);
 }
+
+const SHAPES: &str = r#"<robot name="t">
+  <link name="a">
+    <visual><origin xyz="0 0 1" rpy="0 0 0.5"/><geometry><box size="1 2 3"/></geometry></visual>
+    <visual><geometry><sphere radius="0.25"/></geometry></visual>
+    <collision><geometry><cylinder radius="0.1" length="0.4"/></geometry></collision>
+  </link>
+</robot>"#;
+
+#[test]
+fn a_link_describes_its_shapes_for_the_3d_view() {
+    let v = scan("t.urdf", &[("t.urdf", SHAPES)]);
+    let shapes = v["links"][0]["shapes"].as_array().unwrap();
+    assert_eq!(shapes.len(), 3);
+    assert_eq!(shapes[0]["role"], "visual");
+    assert_eq!(shapes[0]["type"], "box");
+    assert_eq!(shapes[0]["size"], serde_json::json!([1.0, 2.0, 3.0]));
+    assert_eq!(
+        shapes[0]["origin"]["xyz"],
+        serde_json::json!([0.0, 0.0, 1.0])
+    );
+    assert_eq!(
+        shapes[0]["origin"]["rpy"],
+        serde_json::json!([0.0, 0.0, 0.5])
+    );
+    assert_eq!(
+        (shapes[1]["type"].as_str(), shapes[1]["radius"].as_f64()),
+        (Some("sphere"), Some(0.25))
+    );
+    assert_eq!(shapes[2]["role"], "collision");
+    assert_eq!(shapes[2]["type"], "cylinder");
+    assert_eq!(shapes[2]["radius"], 0.1);
+    assert_eq!(shapes[2]["length"], 0.4);
+}
+
+#[test]
+fn an_mjcf_capsule_is_described_and_drawn_for_both_roles() {
+    let mjcf = r#"<mujoco><worldbody><body name="b"><geom type="capsule" size="0.05 0.1"/></body></worldbody></mujoco>"#;
+    let v = scan("m.xml", &[("m.xml", mjcf)]);
+    let shape = &v["links"][1]["shapes"][0];
+    assert_eq!(shape["type"], "capsule");
+    assert_eq!(shape["role"], "both");
+    assert_eq!(shape["radius"], 0.05);
+}
+
+fn mesh_link(filename: &str) -> String {
+    format!(
+        r#"<robot name="t"><link name="a"><visual><geometry><mesh filename="{filename}" scale="1 2 3"/></geometry></visual></link></robot>"#
+    )
+}
+
+fn resolved(filename: &str, dropped: &[&str]) -> Value {
+    let urdf = mesh_link(filename);
+    let mut files = vec![("robot/t.urdf", urdf.as_str())];
+    files.extend(dropped.iter().map(|p| (*p, "")));
+    let v = scan("robot/t.urdf", &files);
+    let mesh = &v["links"][0]["shapes"][0];
+    assert_eq!(mesh["type"], "mesh");
+    assert_eq!(mesh["filename"], filename);
+    assert_eq!(mesh["scale"], serde_json::json!([1.0, 2.0, 3.0]));
+    mesh["resolved"].clone()
+}
+
+#[test]
+fn a_mesh_resolves_relative_to_the_robot_file() {
+    assert_eq!(
+        resolved("meshes/a.stl", &["robot/meshes/a.stl"]),
+        "robot/meshes/a.stl"
+    );
+}
+
+#[test]
+fn a_package_mesh_resolves_by_dropping_the_package_name() {
+    assert_eq!(
+        resolved(
+            "package://arm_description/meshes/a.stl",
+            &["robot/meshes/a.stl", "other/b.stl"]
+        ),
+        "robot/meshes/a.stl"
+    );
+}
+
+#[test]
+fn a_mesh_that_was_not_dropped_is_unresolved() {
+    assert_eq!(
+        resolved("package://arm/meshes/a.stl", &["robot/meshes/b.stl"]),
+        Value::Null
+    );
+}

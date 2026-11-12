@@ -92,7 +92,7 @@ python3 -m http.server -d web 8000
 ```
 
 The scan logic is a plain function (`scan_bundle`) with native tests in `crates/rigscan-wasm/tests/`; the
-JavaScript only draws its JSON (the 3D view is `web/rig.js`, three.js from a pinned CDN import map, so the page needs
+JavaScript only draws its JSON (the 3D view is `web/rig.js`, three.js and its STL and OBJ loaders from a pinned CDN import map, so the page needs
 network access). Pushes to `main` deploy `web/` to GitHub Pages.
 
 ### Adding a lint rule

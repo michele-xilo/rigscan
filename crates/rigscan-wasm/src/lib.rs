@@ -4,8 +4,8 @@
 
 use rigscan_core::{
     lint_mjcf, lint_usd, lint_with, parse_mjcf, parse_urdf, parse_usd, report, Element, Finding,
-    Format, IncludeLoader, Included, JointKind, ParseError, Resolution, Resolver, Robot, Severity,
-    Span, Status, UsdLoader,
+    Format, Geometry, IncludeLoader, Included, JointKind, ParseError, Resolution, Resolver, Robot,
+    Role, Severity, Shape, Span, Status, UsdLoader,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -35,6 +35,7 @@ fn scan(main: &str, files: Files) -> Result<Value, String> {
         Format::Usd => String::new(),
         _ => String::from_utf8_lossy(bytes).into_owned(),
     };
+    let bundle = files.clone();
     let (robot, findings) = match format {
         Format::Urdf => {
             let robot = parse_urdf(&source).map_err(at)?;
@@ -58,7 +59,7 @@ fn scan(main: &str, files: Files) -> Result<Value, String> {
             (robot, findings)
         }
     };
-    Ok(describe(main, format, &source, &robot, &findings))
+    Ok(describe(main, format, &source, &robot, &findings, &bundle))
 }
 
 fn describe(
@@ -67,6 +68,7 @@ fn describe(
     source: &str,
     robot: &Robot,
     findings: &[Finding],
+    files: &Files,
 ) -> Value {
     let report = report(robot, findings);
     let mut links = vec![Status::Healthy; robot.links.len()];
@@ -90,7 +92,13 @@ fn describe(
         },
         "links": robot.links.iter().zip(&links).map(|(l, s)| {
             let (line, column) = position(l.span);
-            json!({ "name": l.name, "status": status(*s), "line": line, "column": column })
+            json!({
+                "name": l.name,
+                "status": status(*s),
+                "line": line,
+                "column": column,
+                "shapes": l.shapes.iter().map(|sh| shape(sh, files, path)).collect::<Vec<_>>(),
+            })
         }).collect::<Vec<_>>(),
         "joints": robot.joints.iter().zip(&joints).map(|(j, s)| {
             let (line, column) = position(j.span);
@@ -122,6 +130,75 @@ fn describe(
             json!({ "what": u.what, "name": u.name, "line": line, "column": column })
         }).collect::<Vec<_>>(),
         "source": source,
+    })
+}
+
+fn shape(s: &Shape, files: &Files, main: &str) -> Value {
+    let geometry: Vec<(&str, Value)> = match &s.geometry {
+        Geometry::Box { size } => vec![("type", json!("box")), ("size", json!(size))],
+        Geometry::Sphere { radius } => vec![("type", json!("sphere")), ("radius", json!(radius))],
+        Geometry::Cylinder { radius, length } => vec![
+            ("type", json!("cylinder")),
+            ("radius", json!(radius)),
+            ("length", json!(length)),
+        ],
+        Geometry::Capsule { radius, length } => vec![
+            ("type", json!("capsule")),
+            ("radius", json!(radius)),
+            ("length", json!(length)),
+        ],
+        Geometry::Mesh { filename, scale } => vec![
+            ("type", json!("mesh")),
+            ("filename", json!(filename)),
+            ("scale", json!(scale)),
+            (
+                "resolved",
+                json!(resolve_mesh(filename, files, dir_of(main))),
+            ),
+        ],
+    };
+    let role = match s.role {
+        Role::Visual => "visual",
+        Role::Collision => "collision",
+        Role::Both => "both",
+    };
+    let common = [
+        ("role", json!(role)),
+        (
+            "origin",
+            json!({ "xyz": s.origin.xyz, "rpy": s.origin.rpy }),
+        ),
+    ];
+    Value::Object(
+        geometry
+            .into_iter()
+            .chain(common)
+            .map(|(k, v)| (k.to_string(), v))
+            .collect(),
+    )
+}
+
+/// The dropped file a mesh reference points at. ROS `package://name/...` cannot be resolved without
+/// the package path, so after the robot file's own directory the match falls back to the longest
+/// path suffix of the reference that some dropped file ends with.
+fn resolve_mesh(reference: &str, files: &Files, dir: &str) -> Option<String> {
+    let rest = reference
+        .strip_prefix("package://")
+        .or_else(|| reference.strip_prefix("file://"))
+        .unwrap_or(reference);
+    let rest = normalize(rest);
+    let beside = normalize(&format!("{dir}/{rest}"));
+    if files.contains_key(&beside) {
+        return Some(beside);
+    }
+    let parts: Vec<&str> = rest.split('/').collect();
+    (0..parts.len()).find_map(|i| {
+        let suffix = parts[i..].join("/");
+        let tail = format!("/{suffix}");
+        files
+            .keys()
+            .find(|k| **k == suffix || k.ends_with(&tail))
+            .cloned()
     })
 }
 

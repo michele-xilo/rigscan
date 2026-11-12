@@ -36,7 +36,7 @@
       <button id="sample" type="button">Try a broken arm</button>
     </div>
     <label id="main-pick" hidden>Scan <select id="main"></select></label>
-    <p id="note" class="note">Mesh files are not checked here: the page only sees what you drop.</p>
+    <p id="note" class="note">STL and OBJ meshes are drawn from what you drop; a missing mesh file is not reported as a finding here, because the page only sees what you drop.</p>
   </section>
 
   <p id="status" role="status" aria-live="polite">Loading Rigscan…</p>
@@ -50,6 +50,7 @@
       <section class="rig" aria-labelledby="rig-title">
         <h2 id="rig-title">3D view</h2>
         <canvas id="rig" role="img" aria-label="3D view of the robot's links and joints. The kinematic tree below has the same elements and works with the keyboard."></canvas>
+        <p id="rig-meshes" class="note" role="status"></p>
         <p class="note">Drag to orbit, right-drag to pan, scroll to zoom. Click a sphere (link) or a line (joint) to select it. Arrows are joint axes.</p>
       </section>
       <section aria-labelledby="tree-title">

@@ -164,3 +164,74 @@ fn a_main_file_that_was_not_dropped_is_an_error() {
     let v = scan("gone.urdf", &[("other.urdf", HEALTHY)]);
     assert!(v["error"].as_str().unwrap().contains("gone.urdf"), "{v}");
 }
+
+fn joint_kinds(inner: &str) -> Vec<String> {
+    let urdf = format!(
+        r#"<robot name="t"><link name="a"/><link name="b"/><link name="c"/><link name="d"/><link name="e"/>{inner}</robot>"#
+    );
+    let v = scan("t.urdf", &[("t.urdf", &urdf)]);
+    v["joints"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|j| j["kind"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn every_urdf_joint_type_has_a_name() {
+    let joints = ["continuous", "prismatic", "floating", "planar"]
+        .iter()
+        .zip(["b", "c", "d", "e"])
+        .map(|(kind, child)| format!(r#"<joint name="{child}" type="{kind}"><parent link="a"/><child link="{child}"/></joint>"#))
+        .collect::<String>();
+    assert_eq!(
+        joint_kinds(&joints),
+        ["continuous", "prismatic", "floating", "planar"]
+    );
+}
+
+#[test]
+fn a_usd_joint_type_the_model_has_no_kind_for_keeps_its_name() {
+    let usd = "#usda 1.0\ndef Xform \"a\" (prepend apiSchemas = [\"PhysicsRigidBodyAPI\"]) {}\ndef Xform \"b\" (prepend apiSchemas = [\"PhysicsRigidBodyAPI\"]) {}\ndef PhysicsSphericalJoint \"j\"\n{\n    rel physics:body0 = </a>\n    rel physics:body1 = </b>\n}\n";
+    let v = scan("r.usda", &[("r.usda", usd)]);
+    assert_eq!(v["joints"][0]["kind"], "spherical");
+    assert_eq!(v["links"][0]["line"], Value::Null);
+}
+
+#[test]
+fn a_warning_and_a_link_finding_are_described() {
+    let urdf = r#"<robot name="t">
+  <link name="a"/>
+  <link name="b"><inertial><mass value="-1"/><inertia ixx="0.1" ixy="0" ixz="0" iyy="0.1" iyz="0" izz="0.1"/></inertial></link>
+  <link name="c"><inertial><mass value="0"/><inertia ixx="0.1" ixy="0" ixz="0" iyy="0.1" iyz="0" izz="0.1"/></inertial></link>
+  <joint name="j1" type="fixed"><parent link="a"/><child link="b"/></joint>
+  <joint name="j2" type="revolute"><parent link="a"/><child link="c"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+</robot>"#;
+    let v = scan("t.urdf", &[("t.urdf", urdf)]);
+    let by_rule = |rule: &str| {
+        v["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|f| f["rule"] == rule)
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(by_rule("RS008")["element"]["kind"], "link");
+    assert_eq!(by_rule("RS008")["element"]["name"], "b");
+    assert_eq!(by_rule("RS009")["severity"], "warning");
+    assert_eq!(v["links"][2]["status"], "warning");
+    assert_eq!(v["verdict"]["warnings"], 1);
+}
+
+#[test]
+fn what_the_model_cannot_hold_is_listed_with_its_position() {
+    let urdf = "<robot name=\"t\">\n  <link name=\"a\"/>\n  <gazebo reference=\"a\"/>\n</robot>";
+    let v = scan("t.urdf", &[("t.urdf", urdf)]);
+    let u = &v["unmapped"][0];
+    assert_eq!(
+        (u["what"].as_str(), u["line"].as_u64()),
+        (Some("gazebo"), Some(3))
+    );
+}

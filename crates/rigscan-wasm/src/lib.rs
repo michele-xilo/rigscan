@@ -10,7 +10,6 @@ use rigscan_core::{
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::rc::Rc;
-use wasm_bindgen::prelude::*;
 
 type Files = Rc<BTreeMap<String, Vec<u8>>>;
 
@@ -228,7 +227,8 @@ impl Resolver for Unchecked {
 
 /// Scan from JavaScript. `paths` and `files` are parallel arrays of file names and `Uint8Array`
 /// contents; `main` names the file to scan. Returns the result as a JSON string.
-#[wasm_bindgen]
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
 pub fn scan_files(main: &str, paths: &js_sys::Array, files: &js_sys::Array) -> String {
     let bundle = paths
         .iter()

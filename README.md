@@ -16,217 +16,92 @@
 
 </p>
 
-Rigscan scans robot description files, reports what is wrong with them, and
-(planned) converts between formats while telling you what each conversion lost.
-The core is written in Rust and is designed to run as a CLI, in the browser via
-WebAssembly, and from Python.
+**Find the missing link, the inverted limit and the mesh that is not there in your URDF, MJCF or USD robot, before the simulator does.**
 
-> **Status: pre-alpha.** URDF, MJCF and USD (UsdPhysics) reading, twenty-two lint rules and a `scan`
-> command exist. There is no conversion, and nothing is
-> published yet. The API will change.
+<p align="center">
+  <img src="assets/demo.png" alt="rigscan scan on a broken arm: an undefined child link, a zero-mass link, an inverted joint limit and a missing mesh" width="800">
+</p>
 
-## What works today
-
-- Parse URDF links and joints, keeping the line and column of each element,
-  along with joint types, origins, limits and mimic, link inertials, and the
-  mesh files a link references. Invalid numbers are reported with their
-  line and column.
-- Lint rules (critical unless noted):
-  - `RS001` a joint references a parent or child link that is not defined, or has none
-  - `RS002` duplicate link names
-  - `RS003` duplicate joint names
-  - `RS004` a link with more than one parent joint
-  - `RS005` a kinematic loop
-  - `RS006` more than one root link
-  - `RS007` a robot with no links
-  - `RS008` negative link mass
-  - `RS009` zero mass on a link moved by a joint (warning; massless frames on
-    fixed joints are fine)
-  - `RS010` negative principal moment of inertia
-  - `RS011` principal moments break the triangle inequality (warning)
-  - `RS012` joint `lower` limit above `upper`
-  - `RS013` revolute or prismatic joint without a limit, or a limit missing
-    `effort` or `velocity`
-  - `RS014` a mesh file that does not exist. The CLI looks relative paths up
-    from the URDF's directory, and `package://name/...` in the nearest parent
-    directory called `name`; a package it cannot locate is not reported
-  - `RS015` a `<mimic>` of a joint that does not exist, or of the joint itself
-  - `RS016` MJCF: a `class` or `childclass` naming a default class that is not defined
-  - `RS017` MJCF: a mesh geom naming an asset that is not defined
-  - `RS018` MJCF: an `<include>` file that does not exist
-  - `RS019` USD: a joint that connects a link to itself (or the world to itself)
-  - `RS020` USD: a rigid body with no mass and no collision shape, so its mass cannot be computed (warning)
-  - `RS021` USD: joints but no `PhysicsArticulationRootAPI` (warning)
-  - `RS022` USD: a reference, payload or sublayer that could not be found
-
-  `RS004`-`RS007` do not run on USD: UsdPhysics joins bodies in a graph, so closed chains and free bodies are valid.
-- `parse_mjcf` reads MJCF into an element tree with line and column spans, splicing in `include`d files
-  through a caller-supplied loader and applying `default` classes. `to_robot()` maps it onto the same model
-  URDF uses, so the structural and physics rules run on it, and lists what the model cannot hold.
-  `lint_mjcf` runs those rules plus RS016-RS018, and `rigscan scan` reads MJCF files too.
-- `parse_usd` opens a USD stage (`.usda` or `.usdc`), composing references, payloads and sublayers through a
-  caller-supplied loader, and `to_robot()` maps the UsdPhysics rigid bodies and joints onto the same model, so
-  the shared rules run on it (`lint_usd` adds RS019-RS022). USD has no source positions, so findings name the file only (JSON `line` and
-  `column` are `null`). `rigscan scan` reads `.usda`, `.usdc` and `.usd` files.
-- `rigscan-core` compiles for `wasm32-unknown-unknown`.
+## Quick start
 
 ```bash
-cargo run -p rigscan-cli -- scan robot.urdf
-# robot.urdf:5:5: critical RS001: joint `j1` child link `ghost` is not defined
+cargo install --git https://github.com/michele-xilo/rigscan rigscan-cli
+rigscan scan robot.urdf          # or a directory: it finds URDF, MJCF and USD files itself
 ```
 
-`rigscan scan` takes files and directories (default: the current directory).
-Directories are searched recursively for supported files (`.urdf`, `.usd`, `.usda`, `.usdc`, and `.xml` files with a `<mujoco>` root),
-skipping anything in `.gitignore` and any MJCF or USD file that another scanned file
-includes or references (a fragment, not a robot on its own); a file named on the command line is always
-scanned. Files are scanned in parallel and the output is sorted, so it is the
-same on every run. Findings go to stdout and a summary (`Found 3 findings in
-2 files.` or `All checks passed!`) to stderr. It exits 0 when clean, 1 when there
-are critical findings, and 2 when a file cannot be scanned.
+No config and no simulator needed. Exit code 0 means no critical findings and 1 means at least one, so it works as a
+CI step. To try it on a robot with known problems, run it on [examples/broken_arm.urdf](examples/broken_arm.urdf).
+Every option and output format (`text`, `full`, `report`, `json`) is in [docs/usage.md](docs/usage.md).
 
-`--output-format` picks the output:
+## What it catches
 
-- `text` (default): one line per finding, as above.
-- `full`: each finding with its source line and a caret under the column.
-- `report`: a verdict line per file, then the status of every link and joint
-  with its findings underneath. There is no numeric score.
-- `json`: one document with `version`, `files` (verdict, element statuses and
-  findings with line and column, or an `error` for a file that could not be
-  scanned) and a `summary`.
+- A joint that points at a link that does not exist, two links with the same name, a link with two parents, a loop,
+  or more than one root.
+- Negative or zero mass, and inertia that no real body can have.
+- A joint whose `lower` limit is above its `upper`, or with no limit, effort or velocity.
+- A mesh file that is not where the description says, and a `mimic` of a joint that is not there.
+- MJCF: a default class, mesh asset or `include` that does not exist.
+- USD: a joint that connects a body to itself, a body with no mass and no collider, joints without an articulation
+  root, and a reference or sublayer that cannot be found.
+- A file that does not parse, with the line and column of the problem.
 
-Other options: `--statistics` counts findings per rule, `-q`/`--quiet` prints
-only the summary and only when something is wrong, and `--color
-auto|always|never` controls colour (teal healthy, amber warning, red critical;
-`auto` honours `NO_COLOR`).
+22 rules in all, each with its ID, severity and a fix, listed in [docs/rules.md](docs/rules.md).
 
-```bash
-cargo run -p rigscan-cli -- scan --output-format report robot.urdf
-# robot.urdf: 1 healthy, 0 warnings, 1 critical
-#   healthy  link  base
-#   critical joint j1
-#     robot.urdf:3:3: critical RS001: joint `j1` child link `ghost` is not defined
-```
+## Why Rigscan
 
-As a library:
+- **Fast.** Several times faster than the loaders it was compared with (table below), and the output is the same on
+  every run, so it fits on every save and in CI over a whole robot library.
+- **Nothing to set up.** One binary, no Python, no simulator, no license.
+- **One tool for three formats.** URDF, MJCF and USD are read into one model, so the same structural and physics
+  rules run on all of them.
+- **Made for CI.** Stable rule IDs, exit codes, JSON output and deterministic, sorted findings.
 
-```rust
-use rigscan_core::{lint, parse_urdf};
-
-let robot = parse_urdf(&std::fs::read_to_string("robot.urdf")?)?;
-for f in lint(&robot) {
-    println!("{} line {}: {}", f.rule, f.span.line, f.message);
-}
-```
-
-## Comparison with other tools
-
-Each check has a minimal probe file in `scripts/compare/probes/`: a URDF, or an MJCF `.xml` for the MJCF
-rules. The same probes are fed to Rigscan and to three popular tools that read URDF: MuJoCo, Pinocchio (which
-uses urdfdom) and yourdfpy. Only MuJoCo reads MJCF, so the others show `-` for the MJCF checks. A tool
-"flags" a probe when it rejects the file or logs an error while loading it. These tools are loaders, not
-linters, so a `no` means the tool accepts that kind of broken robot, not that it is worse at its job. Checks
-a tool flags that Rigscan does not are the target for new rules.
-
-<!-- compare:coverage:start -->
-| Check | Rigscan | MuJoCo 4.0.0 | Pinocchio 4.1.0 | yourdfpy 0.0.60 |
+<!-- compare:summary:start -->
+| | Rigscan | MuJoCo 4.0.0 | Pinocchio 4.1.0 | yourdfpy 0.0.60 |
 |---|:-:|:-:|:-:|:-:|
-| `RS001` Joint references an undefined link | yes | yes | yes | no |
-| `RS002` Duplicate link name | yes | yes | yes | no |
-| `RS003` Duplicate joint name | yes | no | yes | no |
-| `RS004` Link with two parent joints | yes | yes | yes | no |
-| `RS005` Kinematic loop | yes | yes | yes | no |
-| `RS006` More than one root link | yes | no | yes | no |
-| `RS007` Robot has no links | yes | no | yes | no |
-| `RS008` Negative mass | yes | yes | no | no |
-| `RS009` Zero mass on a moving link | yes | yes | no | no |
-| `RS010` Negative principal moment | yes | yes | no | no |
-| `RS011` Triangle inequality of moments | yes | yes | no | no |
-| `RS012` Joint lower limit above upper | yes | no | no | no |
-| `RS013` Joint limit missing or incomplete | yes | no | yes | yes |
-| `RS014` Mesh file not found | yes | no | no | no |
-| `RS015` Mimic of an undefined joint | yes | yes | no | no |
-| `RS016` MJCF: unknown default class | yes | yes | - | - |
-| `RS017` MJCF: mesh geom names an undefined asset | yes | yes | - | - |
-| `RS018` MJCF: include file not found | yes | yes | - | - |
-| `RS019` USD: joint connects a link to itself | yes | - | - | - |
-| `RS020` USD: rigid body with no mass and no collider | yes | - | - | - |
-| `RS021` USD: joints without an articulation root | yes | - | - | - |
-| `RS022` USD: layer could not be composed | yes | - | - | - |
-| Malformed input (bad number, truncated XML) | yes | yes | yes | yes |
-<!-- compare:coverage:end -->
+| Reads URDF | ✅ | ✅ | ✅ | ✅ |
+| Reads MJCF | ✅ | ✅ | ❌ | ❌ |
+| Reads USD (UsdPhysics) | ✅ | ❌ | ❌ | ❌ |
+| Broken-robot checks flagged | 22 of 22 🏆 | 12 of 22 | 8 of 22 | 1 of 22 |
+| Load time, `talos_full_v2` (107 KiB) | 0.49 ms 🏆 | ➖ | 1.62 ms | 4.29 ms |
+| Time compared with Rigscan | 1x | ➖ | 3x slower | 9x slower |
 
-Speed on rigs from the corpus:
+✅ yes  ❌ no  🏆 best  ➖ not measured. The tools are loaders, not linters; see [docs/comparison.md](docs/comparison.md) for each check and each rig.
+<!-- compare:summary:end -->
 
-<!-- compare:speed:start -->
-| Rig | Size | Rigscan | Pinocchio | yourdfpy |
-|---|--:|--:|--:|--:|
-| `double_pendulum` | 4 KiB | 0.011 | 0.085 | 0.246 |
-| `ur5_robot` | 12 KiB | 0.040 | 0.194 | 0.571 |
-| `panda` | 15 KiB | 0.048 | 0.281 | 0.802 |
-| `go2` | 24 KiB | 0.103 | 0.464 | 1.586 |
-| `talos_full_v2` | 107 KiB | 0.382 | 1.699 | 4.571 |
+## What is supported
 
-Milliseconds to load one file with the process already running. Rigscan: criterion median of parse plus lint (`cargo bench -p rigscan-core --bench core -- corpus`). Python tools: best of 20 in-process calls, imports excluded; yourdfpy time includes its validate(). Corpus: Gepetto/example-robot-data `78b6101a6387`. Rigscan commit 37fa1d1, Pinocchio 4.1.0, yourdfpy 0.0.60, Python 3.12.7, Apple M2 Pro, Darwin 25.5.0. A tool that rejects or logs an error on a rig shows that outcome instead of a time. MuJoCo is left out: it loads meshes and cannot resolve `package://` paths.
-<!-- compare:speed:end -->
+| | Reads | Lints | Converts |
+|---|:-:|:-:|:-:|
+| URDF | yes | yes | planned |
+| MJCF | yes | yes | planned |
+| USD (UsdPhysics) | yes | yes | planned |
 
-The outputs behind these tables are committed in `scripts/compare/goldens.json`. Adding a rule means adding
-its probe and rerunning the script (`scripts/compare/compare.py`); CI runs `compare.py --check`.
+The library (`rigscan-core`) compiles for WebAssembly; the CLI is the only surface today. A Python wheel, a browser
+viewer, SARIF output and URDF/MJCF/USD conversion with a report of what each conversion loses are on the
+[roadmap](https://github.com/michele-xilo/rigscan/issues).
 
-## Planned
+## More
 
-- `rigscan scan robot.urdf` with a per-link and per-joint health report, and
-  JSON and SARIF output.
-- MJCF parsing, and URDF to MJCF and MJCF to URDF conversion with a report of
-  dropped features.
-- Around 25 lint rules covering structure (missing links, loops, duplicate
-  names, unresolved mesh paths) and physics sanity (mass, inertia, joint limits).
-- Python wheel and a browser playground.
-- Later: a USD (`.usda`, UsdPhysics) writer and xacro support.
+- [Usage](docs/usage.md): scanning, output formats, exit codes, the library.
+- [Rules](docs/rules.md): every rule ID, what it flags and how to fix it.
+- [Comparison](docs/comparison.md): check by check and rig by rig against MuJoCo, Pinocchio and yourdfpy.
+- [Brand](docs/brand.md): logo, colours and voice.
 
-## Development
+> **Early stage.** Pre-alpha and not published yet, so the API will change. Tested on small hand-written fixtures
+> and on real robots: 69 URDF files from [example-robot-data](https://github.com/Gepetto/example-robot-data), 127
+> MJCF models from [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie) and 39 USD stages from
+> [newton-assets](https://github.com/newton-physics/newton-assets). Not affiliated with any of the projects above.
+
+## Contributing
 
 ```bash
 cargo test
 cargo build -p rigscan-core --target wasm32-unknown-unknown
 ```
 
-Bug fixes start with a failing test.
-
-End-to-end tests run on 69 real robots (Unitree, Franka Panda, SO-101 and more)
-fetched from [example-robot-data](https://github.com/Gepetto/example-robot-data)
-into the gitignored `corpus/` directory. They lint every file, report
-parse and lint speed, then corrupt the files with a seeded generator (8 failure
-modes, equal counts) and check that every corruption is detected:
-
-```bash
-scripts/fetch-corpus.sh
-cargo test --release -p rigscan-core --test e2e_corpus -- --nocapture
-```
-
-Without the corpus the tests skip and say so; `RIGSCAN_REQUIRE_CORPUS=1` makes
-that a failure. `RIGSCAN_SEED=<n>` reruns the corruptions with another seed.
-
-MJCF is tested the same way on [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie): the
-script downloads its `.xml` files (4 MB, no meshes) at a pinned commit, and the test parses every file and
-lints each model, meaning each file no other file includes. Only known upstream findings are allowed.
-
-```bash
-scripts/fetch-mjcf-corpus.sh
-cargo test -p rigscan-core --test e2e_mjcf_corpus -- --nocapture
-```
-
-USD is tested on [newton-assets](https://github.com/newton-physics/newton-assets) (Apache-2.0): the script
-downloads its `.usd`, `.usda` and `.usdc` files (about 350 MB, no meshes or textures) at a pinned commit, and the
-test composes every stage and lints each one that no other file pulls in. Only known findings are allowed.
-
-```bash
-scripts/fetch-usd-corpus.sh
-cargo test --release -p rigscan-core --test e2e_usd_corpus -- --nocapture
-```
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) and the [style guide](STYLE_GUIDE.md). Logo, colours and voice are in [docs/brand.md](docs/brand.md).
+Bug fixes start with a failing test. Setup, the corpora, benchmarks and how to add a rule are in
+[CONTRIBUTING.md](CONTRIBUTING.md) and the [style guide](STYLE_GUIDE.md).
 
 ## License
 

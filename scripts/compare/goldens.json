@@ -335,7 +335,6 @@
         "outcome": "n/a"
       },
       "rigscan": [
-        "RS005",
         "RS019"
       ],
       "yourdfpy": {
@@ -387,7 +386,6 @@
         "outcome": "n/a"
       },
       "rigscan": [
-        "RS007",
         "RS022"
       ],
       "yourdfpy": {
@@ -446,6 +444,76 @@
     }
   },
   "rigscan": "rigscan-cli 0.0.1",
+  "speed": {
+    "note": "Milliseconds to load one file with the process already running. Rigscan: criterion median of parse plus lint (`cargo bench -p rigscan-core --bench core -- corpus`). Python tools: best of 20 in-process calls, imports excluded; yourdfpy time includes its validate(). Corpus: Gepetto/example-robot-data `78b6101a6387`. Rigscan commit 59d878f, Pinocchio 4.1.0, yourdfpy 0.0.60, Python 3.12.7, Apple M2 Pro, Darwin 25.5.0. A tool that rejects or logs an error on a rig shows that outcome instead of a time. MuJoCo is left out: it loads meshes and cannot resolve `package://` paths.",
+    "rigs": [
+      {
+        "kib": 4,
+        "pinocchio": {
+          "ms": 0.07862499842303805,
+          "outcome": "ok"
+        },
+        "rig": "double_pendulum",
+        "rigscan": 0.01489547056384743,
+        "yourdfpy": {
+          "ms": 0.23308299932978116,
+          "outcome": "ok"
+        }
+      },
+      {
+        "kib": 12,
+        "pinocchio": {
+          "ms": 0.18724999972619116,
+          "outcome": "ok"
+        },
+        "rig": "ur5_robot",
+        "rigscan": 0.0466378212594697,
+        "yourdfpy": {
+          "ms": 0.5376250010158401,
+          "outcome": "ok"
+        }
+      },
+      {
+        "kib": 15,
+        "pinocchio": {
+          "ms": 0.2640839993546251,
+          "outcome": "ok"
+        },
+        "rig": "panda",
+        "rigscan": 0.06257449371395861,
+        "yourdfpy": {
+          "ms": 0.7792920005158521,
+          "outcome": "ok"
+        }
+      },
+      {
+        "kib": 24,
+        "pinocchio": {
+          "ms": 0.4490829996939283,
+          "outcome": "ok"
+        },
+        "rig": "go2",
+        "rigscan": 0.1280764006866441,
+        "yourdfpy": {
+          "ms": 1.4914579987816978,
+          "outcome": "ok"
+        }
+      },
+      {
+        "kib": 107,
+        "pinocchio": {
+          "ms": 1.6215420000662562,
+          "outcome": "ok"
+        },
+        "rig": "talos_full_v2",
+        "rigscan": 0.48842054260873224,
+        "yourdfpy": {
+          "ms": 4.285084000002826,
+          "outcome": "ok"
+        }
+      }
+    ]
+  },
   "versions": {
     "mujoco": "4.0.0",
     "pinocchio": "4.1.0",

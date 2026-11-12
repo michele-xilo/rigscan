@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rigscan viewer</title>
+<meta name="description" content="Drop a URDF, MJCF or USD robot and see its health in the browser. Runs Rigscan as WebAssembly; nothing is uploaded.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <img src="assets/logo.svg" alt="" width="56" height="53">
+  </picture>
+  <div>
+    <h1>rigscan <span>viewer</span></h1>
+    <p>A health check for robot descriptions. Runs in your browser; your files are not uploaded.</p>
+  </div>
+</header>
+
+<main>
+  <section id="drop" aria-labelledby="drop-title">
+    <h2 id="drop-title">Open a robot</h2>
+    <p>Drop URDF, MJCF or USD files or a folder here. Files a robot includes or references (MJCF <code>include</code>, USD sublayers) have to be dropped with it.</p>
+    <div class="actions">
+      <label class="button">Choose files<input id="pick-files" type="file" multiple hidden></label>
+      <label class="button">Choose folder<input id="pick-folder" type="file" webkitdirectory hidden></label>
+      <button id="sample" type="button">Try a broken arm</button>
+    </div>
+    <label id="main-pick" hidden>Scan <select id="main"></select></label>
+    <p id="note" class="note">Mesh files are not checked here: the page only sees what you drop.</p>
+  </section>
+
+  <p id="status" role="status" aria-live="polite">Loading Rigscan…</p>
+
+  <div id="result" hidden>
+    <section class="summary" aria-labelledby="summary-title">
+      <h2 id="summary-title">Result</h2>
+      <p id="summary"></p>
+    </section>
+    <div class="grid">
+      <section aria-labelledby="tree-title">
+        <h2 id="tree-title">Kinematic tree</h2>
+        <ul id="tree" class="tree" role="tree"></ul>
+      </section>
+      <section aria-labelledby="findings-title">
+        <h2 id="findings-title">Findings</h2>
+        <ul id="findings" class="findings"></ul>
+        <p id="no-findings" hidden>No findings. Every link and joint is healthy.</p>
+        <details id="unmapped-box" hidden>
+          <summary>What Rigscan cannot hold <span id="unmapped-count"></span></summary>
+          <ul id="unmapped"></ul>
+        </details>
+      </section>
+      <section class="source" aria-labelledby="source-title">
+        <h2 id="source-title">Source <span id="source-name"></span></h2>
+        <div id="source" tabindex="0" role="region" aria-label="Source file"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <a href="https://github.com/michele-xilo/rigscan">Rigscan on GitHub</a>
+</footer>
+<script type="module" src="app.js"></script>
+</body>
+</html>

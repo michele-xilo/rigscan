@@ -4,3 +4,8 @@ target/
 /corpus/
 
 /scripts/compare/.venv/
+
+# Built by scripts/build-web.sh
+/web/pkg/
+/web/assets/
+/web/sample/

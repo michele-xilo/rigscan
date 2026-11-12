@@ -1,8 +1,17 @@
 [workspace]
 resolver = "2"
-members = ["crates/rigscan-core", "crates/rigscan-cli"]
+members = ["crates/rigscan-core", "crates/rigscan-cli", "crates/rigscan-wasm"]
 
 [workspace.package]
 version = "0.0.1"
 edition = "2021"
 license = "Apache-2.0"
+
+# Size matters for the browser build; the CLI and benchmarks keep the plain release profile.
+[profile.wasm]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = "debuginfo"
+panic = "abort"

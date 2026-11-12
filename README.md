@@ -1,9 +1,20 @@
-# Rigscan
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <img src="assets/logo.svg" alt="Rigscan: a robot inside a scanner frame" width="160">
+  </picture>
+</p>
+
+<h1 align="center">Rigscan</h1>
+
+<p align="center"><b>A health check for robot descriptions.</b></p>
+
+<p align="center">
 
 [![build](https://github.com/michele-xilo/rigscan/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/michele-xilo/rigscan/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/michele-xilo/rigscan/branch/main/graph/badge.svg)](https://codecov.io/gh/michele-xilo/rigscan)
 
-A health check for robot descriptions.
+</p>
 
 Rigscan scans robot description files, reports what is wrong with them, and
 (planned) converts between formats while telling you what each conversion lost.
@@ -215,7 +226,7 @@ cargo test --release -p rigscan-core --test e2e_usd_corpus -- --nocapture
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and the [style guide](STYLE_GUIDE.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) and the [style guide](STYLE_GUIDE.md). Logo, colours and voice are in [docs/brand.md](docs/brand.md).
 
 ## License
 

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Rigscan" fill="none" stroke="#14202E" stroke-width="4" stroke-linejoin="round" stroke-linecap="round">
+<title>Rigscan</title>
+<rect width="64" height="64" rx="14" fill="#F3EFE6" stroke="none"/>
+<path d="M32 14V8" stroke-width="3"/>
+<circle cx="32" cy="6.5" r="3.5" fill="#2F5BEA" stroke="none"/>
+<rect x="10" y="14" width="44" height="40" rx="12" fill="#F3EFE6"/>
+<rect x="15" y="25" width="34" height="16" rx="8" fill="#14202E" stroke="none"/>
+<path d="M19 33H26L29 28L33 38L37 31L39 33H45" stroke="#F3EFE6" stroke-width="2.4"/>
+</svg>

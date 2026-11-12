@@ -1,4 +1,5 @@
 import init, { scan_files } from './pkg/rigscan_wasm.js';
+import { createRig } from './rig.js';
 
 const $ = (id) => document.getElementById(id);
 const READ = /\.(urdf|xml|usd|usda|usdc)$/i;
@@ -7,6 +8,7 @@ const WORD = { healthy: 'healthy', warning: 'warning', critical: 'critical' };
 let files = new Map(); // path -> Uint8Array
 let result = null;
 let ready = false;
+let rig = null;
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -22,6 +24,12 @@ function setStatus(text, error = false) {
 }
 
 async function start() {
+  try {
+    rig = createRig($('rig'), (sel) => select(sel, '3d'));
+  } catch {
+    // No WebGL: the tree, findings and source still work.
+    document.querySelector('section.rig').hidden = true;
+  }
   try {
     await init();
     ready = true;
@@ -129,6 +137,7 @@ function draw() {
   drawFindings();
   drawUnmapped();
   drawSource();
+  rig?.show(result);
   select(null);
 }
 
@@ -266,6 +275,7 @@ function select(sel, from, finding) {
     const match = !!sel && f.element.kind === sel.kind && f.element.name === sel.name;
     b.setAttribute('aria-current', String(from === 'finding' ? f === finding : match));
   }
+  rig?.highlight(sel);
   for (const r of document.querySelectorAll('#source .row.picked')) r.classList.remove('picked');
   const line = finding?.line ?? (sel ? lineOf(sel) : null);
   const row = line ? $(`L${line}`) : null;

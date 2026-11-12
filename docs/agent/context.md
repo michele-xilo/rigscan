@@ -211,9 +211,10 @@ line. Probes for MJCF rules are `.xml` files in `scripts/compare/probes/`; only 
 natively) and a `wasm-bindgen` shim `scan_files(main, paths, files)` that returns it as a JSON string. Files come
 from the dropped set: an MJCF `include` or a USD layer resolves against it (relative to the including file), a
 missing one is a finding, and mesh files are never reported missing (RS014 cannot fire, the resolver answers
-`Unknown`). The JSON (`version` 1) has `path`, `format`, `robot`, `verdict`, `links` and `joints` with `status`,
+`Unknown`). The JSON (`version` 1) has `path`, `format`, `robot`, `verdict`, `links` and `joints` with `status` (a joint also has `origin` and `axis`),
 `findings`, `unmapped` and `source`; a file that cannot be scanned gives `{ path, error }`. `web/` is a static page
-(no bundler) that draws it; `scripts/build-web.sh` builds the `wasm` cargo profile (size-optimised, defined in the
+(no bundler) that draws it, and `web/rig.js` draws the 3D skeleton with three.js (a pinned jsDelivr import map; forward
+kinematics from the joint origins, Z up); `scripts/build-web.sh` builds the `wasm` cargo profile (size-optimised, defined in the
 workspace `Cargo.toml`), runs `wasm-bindgen` and copies the logo and sample into `web/`. The Pages workflow
 deploys it from `main`.
 

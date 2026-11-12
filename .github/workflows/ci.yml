@@ -22,5 +22,6 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       - run: cargo build -p rigscan-core --target wasm32-unknown-unknown
+      - run: cargo build -p rigscan-wasm --target wasm32-unknown-unknown --profile wasm
       - run: cargo bench --workspace --no-run
       - run: python3 scripts/compare/compare.py --check

@@ -35,6 +35,12 @@ No config and no simulator needed. Exit code 0 means no critical findings and 1 
 CI step. To try it on a robot with known problems, run it on [examples/broken_arm.urdf](examples/broken_arm.urdf).
 Every option and output format (`text`, `full`, `report`, `json`) is in [docs/usage.md](docs/usage.md).
 
+## Try it in your browser
+
+The [viewer](https://michele-xilo.github.io/rigscan/) runs Rigscan as WebAssembly: drop a URDF, MJCF or USD file (or a
+folder) and see the kinematic tree coloured by health, the findings, and the source line each one points at. Nothing
+is uploaded. It is also the test of the WebAssembly build.
+
 ## What it catches
 
 - A joint that points at a link that does not exist, two links with the same name, a link with two parents, a loop,
@@ -79,8 +85,8 @@ Every option and output format (`text`, `full`, `report`, `json`) is in [docs/us
 | MJCF | yes | yes | planned |
 | USD (UsdPhysics) | yes | yes | planned |
 
-The library (`rigscan-core`) compiles for WebAssembly; the CLI is the only surface today. A Python wheel, a browser
-viewer, SARIF output and URDF/MJCF/USD conversion with a report of what each conversion loses are on the
+The library (`rigscan-core`) compiles for WebAssembly and powers the browser viewer; the CLI is the other surface. A
+Python wheel, a 3D view in the viewer, SARIF output and URDF/MJCF/USD conversion with a report of what each conversion loses are on the
 [roadmap](https://github.com/michele-xilo/rigscan/issues).
 
 ## More

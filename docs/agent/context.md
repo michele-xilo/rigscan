@@ -207,6 +207,16 @@ supplies the mass PhysX computes; a missing `PhysicsMassAPI` alone is not a find
 Those findings are on the `Robot` element at the anchor span, so one inside an included file prints the include's
 line. Probes for MJCF rules are `.xml` files in `scripts/compare/probes/`; only MuJoCo is run on them. Probes for USD rules are `.usda`; none of the compared tools read USD.
 
+`crates/rigscan-wasm` is the browser entry: `scan_bundle(main, files) -> serde_json::Value` (plain, tested
+natively) and a `wasm-bindgen` shim `scan_files(main, paths, files)` that returns it as a JSON string. Files come
+from the dropped set: an MJCF `include` or a USD layer resolves against it (relative to the including file), a
+missing one is a finding, and mesh files are never reported missing (RS014 cannot fire, the resolver answers
+`Unknown`). The JSON (`version` 1) has `path`, `format`, `robot`, `verdict`, `links` and `joints` with `status`,
+`findings`, `unmapped` and `source`; a file that cannot be scanned gives `{ path, error }`. `web/` is a static page
+(no bundler) that draws it; `scripts/build-web.sh` builds the `wasm` cargo profile (size-optimised, defined in the
+workspace `Cargo.toml`), runs `wasm-bindgen` and copies the logo and sample into `web/`. The Pages workflow
+deploys it from `main`.
+
 `scripts/compare/compare.py` writes three generated blocks: the check coverage and speed tables in
 `docs/comparison.md`, and a short summary table in `README.md` (between `compare:*` markers). They use a tick, a
 cross and a trophy for the fastest or most complete tool; the symbols are escapes in the script. Speed

@@ -81,6 +81,19 @@ cargo build -p rigscan-core --target wasm32-unknown-unknown
 cargo bench --workspace --no-run
 ```
 
+### The browser viewer
+
+`web/` is a static page over the `rigscan-wasm` crate. Build and serve it locally with:
+
+```bash
+cargo install wasm-bindgen-cli --version 0.2.130 --locked   # must match crates/rigscan-wasm/Cargo.toml
+scripts/build-web.sh
+python3 -m http.server -d web 8000
+```
+
+The scan logic is a plain function (`scan_bundle`) with native tests in `crates/rigscan-wasm/tests/`; the
+JavaScript only draws its JSON. Pushes to `main` deploy `web/` to GitHub Pages.
+
 ### Adding a lint rule
 
 1. Take the next free ID (`RS` plus three digits). IDs are never reused.

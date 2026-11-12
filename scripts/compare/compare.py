@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Run popular URDF tools next to Rigscan on the same inputs.
 
-    uv run --project scripts/compare python scripts/compare/compare.py          # refresh goldens.json and the README coverage table
-    uv run --project scripts/compare python scripts/compare/compare.py --bench  # also refresh the README speed table (run the corpus bench first)
+    uv run --project scripts/compare python scripts/compare/compare.py          # refresh goldens.json, the coverage table and the README summary
+    uv run --project scripts/compare python scripts/compare/compare.py --bench  # also re-measure speed (run the corpus bench first)
     python3 scripts/compare/compare.py --check                                  # CI: no tools needed
 
 Needs `cargo build --release -p rigscan-cli` and, for --bench, the corpus (see README).
@@ -24,6 +24,7 @@ ROOT = HERE.parent.parent
 PROBES = HERE / "probes"
 GOLDENS = HERE / "goldens.json"
 README = ROOT / "README.md"
+COMPARISON = ROOT / "docs/comparison.md"
 RIGSCAN = ROOT / "target/release/rigscan"
 ROBOTS = ROOT / "corpus/example-robot-data/robots"
 RIGS = ["double_pendulum", "ur5_robot", "panda", "go2", "talos_full_v2"]
@@ -32,8 +33,12 @@ TOOLS = ["mujoco", "pinocchio", "yourdfpy"]
 SPEED_TOOLS = ["pinocchio", "yourdfpy"]
 PACKAGES = {"mujoco": "mujoco", "pinocchio": "pin", "yourdfpy": "yourdfpy"}
 REPS = 20
-# Which probe formats each tool can load; a probe it cannot read is marked n/a.
+# Which probe formats each tool can load; a probe it cannot read is marked n/a. None of the three reads USD.
 READS = {"mujoco": {".urdf", ".xml"}, "pinocchio": {".urdf"}, "yourdfpy": {".urdf"}}
+# Written as escapes so the source holds no emoji: tick, cross, a yellow circle, a minus and a trophy.
+TICK, CROSS, PARTLY, NA, TROPHY = "\u2705", "\u274c", "\U0001f7e1", "\u2796", "\U0001f3c6"
+SYMBOL = {"yes": TICK, "no": CROSS, "partly": PARTLY, "-": NA}
+LEGEND = f"{TICK} flagged  {PARTLY} flagged on some probes  {CROSS} not flagged  {NA} the tool cannot read that format"
 
 # One short title per rule; --check fails when a rule in core has no title or no probe.
 TITLES = {
@@ -182,37 +187,42 @@ def build_goldens():
     return out
 
 
-def coverage_table(goldens):
-    """Per check, whether each tool flags at least one of its probes."""
+def coverage_cells(goldens):
+    """Per check, whether each of Rigscan and the other tools flags at least one of its probes."""
     checks = {}
     for probe, entry in goldens["probes"].items():
         key = check_key(probe)
         if key:
             checks.setdefault(key, []).append(entry)
+    cells = {}
+    for key in sorted(checks, key=lambda k: (k == "parse", k)):
+        entries = checks[key]
+        row = ["yes" if all(key in e["rigscan"] or (key == "parse" and e["rigscan"] == ["error"]) for e in entries) else "no"]
+        for tool in TOOLS:
+            if all(e[tool]["outcome"] == "n/a" for e in entries):
+                row.append("-")
+                continue
+            flagged = [e[tool]["outcome"] not in ("ok", "n/a") for e in entries]
+            row.append("yes" if all(flagged) else "partly" if any(flagged) else "no")
+        cells[key] = row
+    return cells
+
+
+def coverage_table(goldens):
     v = goldens["versions"]
     head = f"| Check | Rigscan | MuJoCo {v['mujoco']} | Pinocchio {v['pinocchio']} | yourdfpy {v['yourdfpy']} |"
     rows = [head, "|---|:-:|:-:|:-:|:-:|"]
-    for key in sorted(checks, key=lambda k: (k == "parse", k)):
-        entries = checks[key]
-        cells = [
-            "yes" if all(key in e["rigscan"] or (key == "parse" and e["rigscan"] == ["error"]) for e in entries) else "no"
-        ]
-        for tool in TOOLS:
-            if all(e[tool]["outcome"] == "n/a" for e in entries):
-                cells.append("-")
-                continue
-            flagged = [e[tool]["outcome"] not in ("ok", "n/a") for e in entries]
-            cells.append("yes" if all(flagged) else "partly" if any(flagged) else "no")
+    for key, row in coverage_cells(goldens).items():
         label = f"`{key}` {TITLES[key]}" if key != "parse" else TITLES[key]
-        rows.append(f"| {label} | " + " | ".join(cells) + " |")
-    return "\n".join(rows)
+        rows.append(f"| {label} | " + " | ".join(SYMBOL[c] for c in row) + " |")
+    return "\n".join(rows) + f"\n\n{LEGEND}"
 
 
-def splice(text, name, body):
+def splice(text, name, body, where="README.md"):
     start, end = markers(name)
     pattern = re.compile(re.escape(start) + r".*?" + re.escape(end), re.S)
     if not pattern.search(text):
-        sys.exit(f"README.md is missing the {start} ... {end} markers")
+        sys.exit(f"{where} is missing the {start} ... {end} markers")
     return pattern.sub(lambda _: f"{start}\n{body}\n{end}", text)
 
 
@@ -241,28 +251,78 @@ def criterion_ms(rig):
     return json.loads(est.read_text())["median"]["point_estimate"] / 1e6
 
 
-def speed_table(goldens):
-    header = "| Rig | Size | Rigscan | Pinocchio | yourdfpy |\n|---|--:|--:|--:|--:|"
-    rows = []
+def measure_speed(goldens):
+    """Load time per rig for Rigscan and the tools that can read corpus rigs, with the note that explains how."""
+    rigs = []
     for rig in RIGS:
         path = next(ROBOTS.rglob(f"{rig}.urdf"))
-        cells = [f"{criterion_ms(rig):.3f}"]
+        entry = {"rig": rig, "kib": round(path.stat().st_size / 1024), "rigscan": criterion_ms(rig)}
         for tool in SPEED_TOOLS:
             outcome, _, _ = attempt(tool, path)
-            cells.append(f"{best_of(lambda: attempt(tool, path)[2]) * 1000:.3f}" if outcome == "ok" else outcome)
-        rows.append(f"| `{rig}` | {path.stat().st_size / 1024:.0f} KiB | " + " | ".join(cells) + " |")
+            entry[tool] = {"outcome": outcome}
+            if outcome == "ok":
+                entry[tool]["ms"] = best_of(lambda: attempt(tool, path)[2]) * 1000
+        rigs.append(entry)
     v = goldens["versions"]
+    commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     note = (
         f"Milliseconds to load one file with the process already running. Rigscan: criterion median of "
         f"parse plus lint (`cargo bench -p rigscan-core --bench core -- corpus`). Python tools: best of {REPS} "
         "in-process calls, imports excluded; yourdfpy time includes its validate(). "
         f"Corpus: Gepetto/example-robot-data `{corpus_commit()[:12]}`. "
-        f"Rigscan commit {subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=ROOT, capture_output=True, text=True).stdout.strip()}, Pinocchio {v['pinocchio']}, yourdfpy {v['yourdfpy']}, "
+        f"Rigscan commit {commit}, Pinocchio {v['pinocchio']}, yourdfpy {v['yourdfpy']}, "
         f"Python {platform.python_version()}, {cpu()}, {platform.system()} {platform.release()}. "
         "A tool that rejects or logs an error on a rig shows that outcome instead of a time. "
         "MuJoCo is left out: it loads meshes and cannot resolve `package://` paths."
     )
-    return f"{header}\n" + "\n".join(rows) + f"\n\n{note}"
+    return {"rigs": rigs, "note": note}
+
+
+def times(entry):
+    """Millisecond load time per tool name, for the tools that produced one."""
+    out = {"rigscan": entry["rigscan"]}
+    out.update({t: entry[t]["ms"] for t in SPEED_TOOLS if "ms" in entry[t]})
+    return out
+
+
+def speed_table(goldens):
+    speed = goldens["speed"]
+    rows = ["| Rig | Size | Rigscan | Pinocchio | yourdfpy |", "|---|--:|--:|--:|--:|"]
+    for entry in speed["rigs"]:
+        t = times(entry)
+        best = min(t.values())
+        cells = []
+        for tool in ["rigscan", *SPEED_TOOLS]:
+            if tool == "rigscan" or "ms" in entry[tool]:
+                trophy = f" {TROPHY}" if t[tool] == best else ""
+                cells.append(f"{t[tool]:.3f}{trophy}")
+            else:
+                cells.append(f"{CROSS} {entry[tool]['outcome']}")
+        rows.append(f"| `{entry['rig']}` | {entry['kib']} KiB | " + " | ".join(cells) + " |")
+    return "\n".join(rows) + f"\n\n{speed['note']}"
+
+
+def summary_table(goldens):
+    """The short table for the README: formats read, checks caught and load time on the largest rig."""
+    v = goldens["versions"]
+    cells = coverage_cells(goldens)
+    rules = [k for k in cells if k != "parse"]
+    caught = [sum(cells[k][i] == "yes" for k in rules) for i in range(4)]
+    big = goldens["speed"]["rigs"][-1]
+    t = times(big)
+    best = max(caught)
+    head = f"| | Rigscan | MuJoCo {v['mujoco']} | Pinocchio {v['pinocchio']} | yourdfpy {v['yourdfpy']} |"
+    rows = [head, "|---|:-:|:-:|:-:|:-:|"]
+    for label, suffixes in [("Reads URDF", {".urdf"}), ("Reads MJCF", {".xml"}), ("Reads USD (UsdPhysics)", {".usda"})]:
+        rows.append(f"| {label} | {TICK} | " + " | ".join(TICK if suffixes <= READS[tool] else CROSS for tool in TOOLS) + " |")
+    caught_cells = [f"{n} of {len(rules)}" + (f" {TROPHY}" if n == best else "") for n in caught]
+    rows.append("| Broken-robot checks flagged | " + " | ".join(caught_cells) + " |")
+    load = [f"{t['rigscan']:.2f} ms {TROPHY}", NA] + [f"{t[x]:.2f} ms" if x in t else CROSS for x in SPEED_TOOLS]
+    rows.append(f"| Load time, `{big['rig']}` ({big['kib']} KiB) | " + " | ".join(load) + " |")
+    slower = ["1x", NA] + [f"{t[x] / t['rigscan']:.0f}x slower" if x in t else NA for x in SPEED_TOOLS]
+    rows.append("| Time compared with Rigscan | " + " | ".join(slower) + " |")
+    legend = f"{TICK} yes  {CROSS} no  {TROPHY} best  {NA} not measured. The tools are loaders, not linters; see [docs/comparison.md](docs/comparison.md) for each check and each rig."
+    return "\n".join(rows) + f"\n\n{legend}"
 
 
 # ---- modes -----------------------------------------------------------------
@@ -289,10 +349,16 @@ def check():
             problems.append(f"probe {n} is not named RSnnn_*, parse_* or healthy")
         if key and key.startswith("RS") and key not in entry.get("rigscan", []):
             problems.append(f"Rigscan golden for {n} does not include {key}")
-    start, end = markers("coverage")
-    text = README.read_text()
-    if splice(text, "coverage", coverage_table(goldens)) != text:
-        problems.append("README coverage table is stale; rerun compare.py")
+    if "speed" not in goldens:
+        problems.append("goldens.json has no speed measurements; rerun compare.py --bench")
+    else:
+        text = COMPARISON.read_text()
+        stale = splice(splice(text, "coverage", coverage_table(goldens), "docs/comparison.md"), "speed", speed_table(goldens), "docs/comparison.md")
+        if stale != text:
+            problems.append("docs/comparison.md tables are stale; rerun compare.py")
+        text = README.read_text()
+        if splice(text, "summary", summary_table(goldens)) != text:
+            problems.append("README summary table is stale; rerun compare.py")
     for p in problems:
         print(p, file=sys.stderr)
     return 1 if problems else 0
@@ -308,12 +374,18 @@ def main():
     os.chdir(tempfile.gettempdir())  # MuJoCo writes MUJOCO_LOG.TXT into the working directory
     if not RIGSCAN.exists():
         sys.exit("build the CLI first: cargo build --release -p rigscan-cli")
+    previous = json.loads(GOLDENS.read_text()) if GOLDENS.exists() else {}
     goldens = build_goldens()
-    GOLDENS.write_text(json.dumps(goldens, indent=2, sort_keys=True) + "\n")
-    text = splice(README.read_text(), "coverage", coverage_table(goldens))
     if args.bench:
-        text = splice(text, "speed", speed_table(goldens))
-    README.write_text(text)
+        goldens["speed"] = measure_speed(goldens)
+    elif "speed" in previous:
+        goldens["speed"] = previous["speed"]
+    else:
+        sys.exit("goldens.json has no speed measurements yet; run with --bench")
+    GOLDENS.write_text(json.dumps(goldens, indent=2, sort_keys=True) + "\n")
+    text = splice(COMPARISON.read_text(), "coverage", coverage_table(goldens), "docs/comparison.md")
+    COMPARISON.write_text(splice(text, "speed", speed_table(goldens), "docs/comparison.md"))
+    README.write_text(splice(README.read_text(), "summary", summary_table(goldens)))
 
 
 if __name__ == "__main__":

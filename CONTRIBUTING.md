@@ -39,8 +39,20 @@ rustup target add wasm32-unknown-unknown
 cargo test --workspace
 ```
 
-For the end-to-end tests on real robots, run `scripts/fetch-corpus.sh` once; it
-downloads about 2.6 MB into the gitignored `corpus/`. Without it those tests skip.
+For the end-to-end tests on real robots, fetch the corpora into the gitignored `corpus/`. Without them those
+tests skip and say so; `RIGSCAN_REQUIRE_CORPUS=1` makes a missing corpus a failure.
+
+```bash
+scripts/fetch-corpus.sh        # 69 URDF robots from example-robot-data, about 2.6 MB
+scripts/fetch-mjcf-corpus.sh   # MuJoCo Menagerie .xml files at a pinned commit, 4 MB, no meshes
+scripts/fetch-usd-corpus.sh    # newton-assets stages at a pinned commit, about 350 MB, no meshes or textures
+cargo test --release -p rigscan-core --test e2e_corpus --test e2e_mjcf_corpus --test e2e_usd_corpus -- --nocapture
+```
+
+The URDF test lints every file, reports parse and lint speed, then corrupts the files with a seeded generator (8
+failure modes, equal counts) and checks that every corruption is detected; `RIGSCAN_SEED=<n>` reruns it with another
+seed. The MJCF and USD tests parse every file and lint each model that no other file includes or references; only
+known upstream findings are allowed.
 
 Optional tools: `cargo-llvm-cov` for coverage and `gitleaks` for the secret
 scan.
@@ -76,10 +88,10 @@ cargo bench --workspace --no-run
    column, and one healthy document that must not trigger it.
 3. Implement the rule in `crates/rigscan-core/src/lint.rs` so that it reads only
    `Robot`, never format-specific data. One rule then serves every format.
-4. Add the rule to the list in the README.
+4. Add the rule to [docs/rules.md](docs/rules.md).
 5. Add its probe to `scripts/compare/probes/` (named `RSnnn_<what>.urdf`) and a title to `TITLES` in
-   `scripts/compare/compare.py`, then rerun the script (see the README comparison section).
-   CI fails when a rule has no probe or the README table is stale.
+   `scripts/compare/compare.py`, then rerun the script (see [docs/comparison.md](docs/comparison.md)).
+   CI fails when a rule has no probe or a comparison table is stale.
 
 ### Performance
 

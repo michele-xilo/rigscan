@@ -207,6 +207,12 @@ supplies the mass PhysX computes; a missing `PhysicsMassAPI` alone is not a find
 Those findings are on the `Robot` element at the anchor span, so one inside an included file prints the include's
 line. Probes for MJCF rules are `.xml` files in `scripts/compare/probes/`; only MuJoCo is run on them. Probes for USD rules are `.usda`; none of the compared tools read USD.
 
+`scripts/compare/compare.py` writes three generated blocks: the check coverage and speed tables in
+`docs/comparison.md`, and a short summary table in `README.md` (between `compare:*` markers). They use a tick, a
+cross and a trophy for the fastest or most complete tool; the symbols are escapes in the script. Speed
+measurements are stored in `goldens.json` so a run without `--bench` keeps them. `scripts/render-demo.py` renders
+the real output of `rigscan scan examples/broken_arm.urdf` to `assets/demo.png`; rerun it when the output changes.
+
 `lint` never touches files; `lint_with` asks a `Resolver` whether a reference exists. The CLI resolver treats
 `package://name/...` as the nearest ancestor directory called `name`. The corpus holds URDFs only, so a
 CLI scan of it reports RS014 for every mesh; the core corpus test uses `lint` and is unaffected.

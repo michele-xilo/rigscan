@@ -82,8 +82,8 @@ in input order so output is deterministic. The summary line is on stderr to keep
   centre of mass: URDF `inertial/origin`, MJCF inertial `pos`, USD `centerOfMass`; MJCF inertial orientation becomes `origin.rpy`),
   `Shape { role, geometry, origin, span }` from URDF `<visual>`/`<collision>` and MJCF geoms: `Geometry` is box, sphere,
   cylinder, capsule (full extents; MJCF half sizes are doubled) or mesh with scale; `span` is the geometry element.
-  `Link::meshes()` yields the mesh files and spans for RS014. An MJCF geom is `Both` unless `contype` and
-  `conaffinity` are 0 (`Visual`). USD shapes are not read yet (collision stays `unmapped`) (#5, #73).
+  `Link::meshes()` yields the mesh files and spans for RS014. An MJCF geom is `Visual` when `contype` and
+  `conaffinity` are 0, else `Collision` in group 3 or higher (hidden by default), else `Both`. USD shapes are not read yet (collision stays `unmapped`) (#5, #73).
 - `Joint { name, parent, child, kind, origin, limit, mimic, axis, dynamics, span }`: `axis` is the resolved axis as
   authored, not normalized (URDF default x, MJCF hinge/slide default z, USD token X/Y/Z default x), set for revolute,
   continuous and prismatic joints and `None` for fixed and floating; `dynamics` is damping and friction (URDF

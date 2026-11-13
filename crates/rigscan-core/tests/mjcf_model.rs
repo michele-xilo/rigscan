@@ -608,6 +608,24 @@ fn a_fromto_with_no_length_is_an_error() {
 }
 
 #[test]
+fn euler_in_the_urdf_order_is_read_as_the_rpy_it_is() {
+    let rpy = |angles: &str| {
+        robot(&format!(
+            "<mujoco><compiler angle=\"radian\" eulerseq=\"XYZ\"/><worldbody>\
+             <body name=\"a\" euler=\"{angles}\"><joint name=\"j\"/></body></worldbody></mujoco>"
+        ))
+        .joints[0]
+            .origin
+            .rpy
+    };
+    assert_eq!(rpy("0.1 0.2 0.3"), [0.1, 0.2, 0.3]);
+    assert_eq!(
+        rpy("0.3 1.5707963267948966 0.4"),
+        [0.3, std::f64::consts::FRAC_PI_2, 0.4]
+    );
+}
+
+#[test]
 fn geom_pos_is_the_shape_origin_and_default_class_values_apply() {
     let r = robot(
         "<mujoco><default><geom size=\"2\" pos=\"1 2 3\"/></default><worldbody><body name=\"a\"><geom/></body></worldbody></mujoco>",

@@ -177,7 +177,7 @@ impl Mapper {
         let rotation = self.rotation(node)?;
         let origin = Origin {
             xyz: add(sub(pos, offset), turn(&rotation, anchor)),
-            rpy: rpy(&rotation),
+            rpy: self.orientation(node)?,
         };
         for j in &joints {
             // Only the first joint places the link frame; a later one elsewhere cannot be held.
@@ -304,6 +304,14 @@ impl Mapper {
     }
 
     fn orientation(&self, node: &MjcfNode) -> Result<[f64; 3], ParseError> {
+        // Fixed axes x, y, z are the rpy convention, so the angles are already the answer; going
+        // through a matrix would add rounding and lose roll and yaw at a pitch of 90 degrees.
+        if self.eulerseq == "XYZ" && node.attr("quat").is_none() && node.attr("axisangle").is_none()
+        {
+            if let Some(e) = numbers(node, "euler", 3)? {
+                return Ok([e[0] * self.angle, e[1] * self.angle, e[2] * self.angle]);
+            }
+        }
         Ok(rpy(&self.rotation(node)?))
     }
 

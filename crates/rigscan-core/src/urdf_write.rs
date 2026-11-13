@@ -190,7 +190,7 @@ fn origin(out: &mut String, indent: &str, o: &Origin) {
     out.push_str("/>\n");
 }
 
-fn attr(out: &mut String, key: &str, value: &str) {
+pub(crate) fn attr(out: &mut String, key: &str, value: &str) {
     let _ = write!(out, " {key}=\"");
     for c in value.chars() {
         match c {
@@ -204,16 +204,23 @@ fn attr(out: &mut String, key: &str, value: &str) {
     out.push('"');
 }
 
-fn number(out: &mut String, key: &str, v: f64) {
-    let _ = write!(out, " {key}=\"{v}\"");
+pub(crate) fn number(out: &mut String, key: &str, v: f64) {
+    // Adding zero turns -0 into 0, which reads back equal and keeps the text stable.
+    let _ = write!(out, " {key}=\"{}\"", v + 0.0);
 }
 
-fn optional(out: &mut String, key: &str, v: Option<f64>) {
+pub(crate) fn optional(out: &mut String, key: &str, v: Option<f64>) {
     if let Some(v) = v {
         number(out, key, v);
     }
 }
 
-fn vector(out: &mut String, key: &str, v: [f64; 3]) {
-    let _ = write!(out, " {key}=\"{} {} {}\"", v[0], v[1], v[2]);
+pub(crate) fn vector(out: &mut String, key: &str, v: [f64; 3]) {
+    let _ = write!(
+        out,
+        " {key}=\"{} {} {}\"",
+        v[0] + 0.0,
+        v[1] + 0.0,
+        v[2] + 0.0
+    );
 }

@@ -542,6 +542,44 @@ fn a_joint_pos_is_rotated_by_the_body_orientation() {
 }
 
 #[test]
+fn a_capsule_fromto_is_a_capsule_along_the_segment() {
+    let r = robot(
+        "<mujoco><worldbody><body name=\"a\">\
+         <geom type=\"capsule\" size=\"0.1\" fromto=\"0 0 0 0 0 2\"/>\
+         </body></worldbody></mujoco>",
+    );
+    let s = &r.links[1].shapes[0];
+    assert_eq!(
+        s.geometry,
+        Geometry::Capsule {
+            radius: 0.1,
+            length: 2.0
+        }
+    );
+    same_point(s.origin.xyz, [0.0, 0.0, 1.0]);
+    same_point(s.origin.rpy, [0.0; 3]);
+}
+
+#[test]
+fn a_cylinder_fromto_is_turned_from_z_onto_the_segment() {
+    let r = robot(
+        "<mujoco><worldbody><body name=\"a\">\
+         <geom type=\"cylinder\" size=\"0.1\" fromto=\"0 0 0 2 0 0\"/>\
+         </body></worldbody></mujoco>",
+    );
+    let s = &r.links[1].shapes[0];
+    assert_eq!(
+        s.geometry,
+        Geometry::Cylinder {
+            radius: 0.1,
+            length: 2.0
+        }
+    );
+    same_point(s.origin.xyz, [1.0, 0.0, 0.0]);
+    same_point(s.origin.rpy, [0.0, std::f64::consts::FRAC_PI_2, 0.0]);
+}
+
+#[test]
 fn geom_pos_is_the_shape_origin_and_default_class_values_apply() {
     let r = robot(
         "<mujoco><default><geom size=\"2\" pos=\"1 2 3\"/></default><worldbody><body name=\"a\"><geom/></body></worldbody></mujoco>",
@@ -589,7 +627,7 @@ fn geoms_the_model_cannot_hold_stay_unmapped() {
         "<mujoco><worldbody><body name=\"a\">\
          <geom name=\"e\" type=\"ellipsoid\" size=\"1 2 3\"/>\
          <geom name=\"p\" type=\"plane\" size=\"1 1 1\"/>\
-         <geom name=\"f\" type=\"capsule\" size=\"1\" fromto=\"0 0 0 1 0 0\"/>\
+         <geom name=\"f\" type=\"box\" size=\"1\" fromto=\"0 0 0 1 0 0\"/>\
          <geom name=\"s\" type=\"box\" size=\"1 2\"/>\
          </body></worldbody></mujoco>",
     );

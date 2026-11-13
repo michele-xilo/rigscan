@@ -363,6 +363,12 @@ impl Mapper {
             },
             None => primitive(node)?,
         };
+        let segment = if geometry.is_none() {
+            segment(node)?
+        } else {
+            None
+        };
+        let geometry = geometry.or_else(|| segment.as_ref().map(|s| s.0.clone()));
         let Some(geometry) = geometry else {
             self.lose("geom", name, node);
             return Ok(());
@@ -380,9 +386,15 @@ impl Mapper {
         } else {
             Role::Both
         };
-        let xyz = numbers(node, "pos", 3)?.map_or([0.0; 3], |v| [v[0], v[1], v[2]]);
+        // MuJoCo ignores pos and the orientation attributes on a geom with fromto.
+        let (xyz, rpy) = match &segment {
+            Some((_, middle, rotation)) => (*middle, rpy(rotation)),
+            None => (
+                numbers(node, "pos", 3)?.map_or([0.0; 3], |v| [v[0], v[1], v[2]]),
+                self.orientation(node)?,
+            ),
+        };
         let xyz = sub(xyz, offset);
-        let rpy = self.orientation(node)?;
         self.robot.links[link].shapes.push(Shape {
             role,
             geometry,
@@ -457,6 +469,27 @@ fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
 
 fn turn(r: &Mat, v: [f64; 3]) -> [f64; 3] {
     [0, 1, 2].map(|i| r[i][0] * v[0] + r[i][1] * v[1] + r[i][2] * v[2])
+}
+
+/// A capsule or cylinder given by its end points: the shape, the middle of the segment and the
+/// rotation that turns Z onto it. Other types with `fromto` are not held.
+fn segment(node: &MjcfNode) -> Result<Option<(Geometry, [f64; 3], Mat)>, ParseError> {
+    let Some(ends) = numbers(node, "fromto", 6)? else {
+        return Ok(None);
+    };
+    let size = list(node, "size")?.unwrap_or_default();
+    let (from, to) = ([ends[0], ends[1], ends[2]], [ends[3], ends[4], ends[5]]);
+    let along = sub(to, from);
+    let length = along.iter().map(|c| c * c).sum::<f64>().sqrt();
+    let geometry = match (node.attr("type"), size.first()) {
+        (Some("capsule"), Some(&radius)) => Geometry::Capsule { radius, length },
+        (Some("cylinder"), Some(&radius)) => Geometry::Cylinder { radius, length },
+        _ => return Ok(None),
+    };
+    let rotation = from_zaxis(along)
+        .ok_or_else(|| position_error(node, "attribute `fromto` has no direction".to_string()))?;
+    let middle = add(from, along.map(|c| c / 2.0));
+    Ok(Some((geometry, middle, rotation)))
 }
 
 fn primitive(node: &MjcfNode) -> Result<Option<Geometry>, ParseError> {

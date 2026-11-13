@@ -481,6 +481,30 @@ fn a_geom_with_no_contacts_is_visual_only() {
 }
 
 #[test]
+fn a_geom_in_a_hidden_group_is_collision_only() {
+    let got = shapes(
+        "<geom size=\"1\" group=\"3\"/>\
+         <geom size=\"1\" group=\"5\"/>\
+         <geom size=\"1\" group=\"2\"/>\
+         <geom size=\"1\"/>",
+    );
+    let roles: Vec<_> = got.iter().map(|g| g.0).collect();
+    assert_eq!(
+        roles,
+        [Role::Collision, Role::Collision, Role::Both, Role::Both]
+    );
+}
+
+#[test]
+fn the_group_of_a_geom_is_read_through_its_default_class() {
+    let r = robot(
+        "<mujoco><default><default class=\"collision\"><geom group=\"3\"/></default></default>\
+         <worldbody><body name=\"a\"><geom size=\"1\" class=\"collision\"/></body></worldbody></mujoco>",
+    );
+    assert_eq!(r.links[1].shapes[0].role, Role::Collision);
+}
+
+#[test]
 fn geom_pos_is_the_shape_origin_and_default_class_values_apply() {
     let r = robot(
         "<mujoco><default><geom size=\"2\" pos=\"1 2 3\"/></default><worldbody><body name=\"a\"><geom/></body></worldbody></mujoco>",

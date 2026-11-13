@@ -346,8 +346,15 @@ impl Mapper {
             return Ok(());
         };
         // MuJoCo collides two geoms only when contype/conaffinity say so; both 0 is look-only.
+        // Groups 3 and up are hidden by default, the convention for collision-only geometry.
+        let hidden = node
+            .attr("group")
+            .and_then(|g| g.parse::<i32>().ok())
+            .is_some_and(|g| g >= 3);
         let role = if node.attr("contype") == Some("0") && node.attr("conaffinity") == Some("0") {
             Role::Visual
+        } else if hidden {
+            Role::Collision
         } else {
             Role::Both
         };

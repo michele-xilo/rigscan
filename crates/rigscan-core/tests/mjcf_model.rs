@@ -504,6 +504,43 @@ fn the_group_of_a_geom_is_read_through_its_default_class() {
     assert_eq!(r.links[1].shapes[0].role, Role::Collision);
 }
 
+fn same_point(a: [f64; 3], b: [f64; 3]) {
+    assert!(
+        a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-9),
+        "{a:?} != {b:?}"
+    );
+}
+
+#[test]
+fn a_joint_pos_moves_the_link_frame_to_the_joint() {
+    let r = robot(
+        r#"<mujoco><worldbody>
+  <body name="a" pos="1 0 0">
+    <joint name="j" pos="0 0 0.5"/>
+    <inertial pos="0 0 0.5" mass="1" diaginertia="1 1 1"/>
+    <geom size="1" pos="0 0 0.5"/>
+    <body name="b" pos="0 0 1"><joint name="k"/></body>
+  </body>
+</worldbody></mujoco>"#,
+    );
+    let joint = |n: &str| r.joints.iter().find(|j| j.name == n).unwrap();
+    same_point(joint("j").origin.xyz, [1.0, 0.0, 0.5]);
+    same_point(r.links[1].shapes[0].origin.xyz, [0.0; 3]);
+    same_point(r.links[1].inertial.as_ref().unwrap().origin.xyz, [0.0; 3]);
+    same_point(joint("k").origin.xyz, [0.0, 0.0, 0.5]);
+}
+
+#[test]
+fn a_joint_pos_is_rotated_by_the_body_orientation() {
+    let r = robot(
+        r#"<mujoco><worldbody>
+  <body name="a" euler="0 0 90"><joint name="j" pos="1 0 0"/><geom size="1" pos="1 0 0"/></body>
+</worldbody></mujoco>"#,
+    );
+    same_point(r.joints[0].origin.xyz, [0.0, 1.0, 0.0]);
+    same_point(r.links[1].shapes[0].origin.xyz, [0.0; 3]);
+}
+
 #[test]
 fn geom_pos_is_the_shape_origin_and_default_class_values_apply() {
     let r = robot(

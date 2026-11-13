@@ -95,7 +95,8 @@ in input order so output is deterministic. The summary line is on stderr to keep
   attribute (`inertia` fields, `mesh filename`) is a `ParseError` prefixed with
   `line:col:`. A scan stops at the first one. If users want all problems
   reported at once, make these findings instead.
-- Not yet: USD shapes, MJCF ellipsoid/plane/hfield/sdf/`fromto` geoms, MJCF joint `pos`, actuators, `metersPerUnit`.
+- MJCF puts the link frame on the body and offsets the joint by `pos`; the model puts it on the joint, as URDF does. The first joint's `pos` is added to the joint origin and subtracted from the link's shapes, inertial and child bodies. A later joint on the same body at a different `pos` is `unmapped` as `joint/pos`. A capsule or cylinder with `fromto` is read as a shape centred on the segment.
+- Not yet: USD shapes, MJCF ellipsoid/plane/hfield/sdf geoms and `fromto` on other types, actuators, `metersPerUnit`.
 
 Known risk for #11: an MJCF body can have several joints to its parent, or
 none. The model has one parent/child edge per joint, so RS004 would flag
@@ -128,7 +129,7 @@ origin. A body without `<inertial>` has no inertial because MuJoCo infers it fro
 mesh `Shape`s joined with `meshdir`, with the asset's `scale`.
 
 `Robot.unmapped` lists what the model cannot hold, with name and span, for the loss report (#18): actuators,
-tendons, equality constraints, contacts, sensors, keyframes, geoms that are not a box, sphere, cylinder, capsule or mesh (or use `fromto`) and anything inside `frame`,
+tendons, equality constraints, contacts, sensors, keyframes, geoms that are not a box, sphere, cylinder, capsule or mesh (or use `fromto` on a type other than capsule or cylinder) and anything inside `frame`,
 `replicate`, `attach`, `composite` or `flexcomp`, which are not expanded.
 The URDF reader fills it too: each direct child of `<robot>`, `<link>`, `<joint>` or `<inertial>` that it does not read
 (`material`, `transmission`, `gazebo`, `safety_controller`, `calibration`, `visual/material`, `collision/material`, unknown tags).

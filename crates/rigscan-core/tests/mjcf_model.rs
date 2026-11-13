@@ -504,6 +504,109 @@ fn the_group_of_a_geom_is_read_through_its_default_class() {
     assert_eq!(r.links[1].shapes[0].role, Role::Collision);
 }
 
+fn same_point(a: [f64; 3], b: [f64; 3]) {
+    assert!(
+        a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-9),
+        "{a:?} != {b:?}"
+    );
+}
+
+#[test]
+fn a_joint_pos_moves_the_link_frame_to_the_joint() {
+    let r = robot(
+        r#"<mujoco><worldbody>
+  <body name="a" pos="1 0 0">
+    <joint name="j" pos="0 0 0.5"/>
+    <inertial pos="0 0 0.5" mass="1" diaginertia="1 1 1"/>
+    <geom size="1" pos="0 0 0.5"/>
+    <body name="b" pos="0 0 1"><joint name="k"/></body>
+  </body>
+</worldbody></mujoco>"#,
+    );
+    let joint = |n: &str| r.joints.iter().find(|j| j.name == n).unwrap();
+    same_point(joint("j").origin.xyz, [1.0, 0.0, 0.5]);
+    same_point(r.links[1].shapes[0].origin.xyz, [0.0; 3]);
+    same_point(r.links[1].inertial.as_ref().unwrap().origin.xyz, [0.0; 3]);
+    same_point(joint("k").origin.xyz, [0.0, 0.0, 0.5]);
+}
+
+#[test]
+fn a_joint_pos_is_rotated_by_the_body_orientation() {
+    let r = robot(
+        r#"<mujoco><worldbody>
+  <body name="a" euler="0 0 90"><joint name="j" pos="1 0 0"/><geom size="1" pos="1 0 0"/></body>
+</worldbody></mujoco>"#,
+    );
+    same_point(r.joints[0].origin.xyz, [0.0, 1.0, 0.0]);
+    same_point(r.links[1].shapes[0].origin.xyz, [0.0; 3]);
+}
+
+#[test]
+fn a_capsule_fromto_is_a_capsule_along_the_segment() {
+    let r = robot(
+        "<mujoco><worldbody><body name=\"a\">\
+         <geom type=\"capsule\" size=\"0.1\" fromto=\"0 0 0 0 0 2\"/>\
+         </body></worldbody></mujoco>",
+    );
+    let s = &r.links[1].shapes[0];
+    assert_eq!(
+        s.geometry,
+        Geometry::Capsule {
+            radius: 0.1,
+            length: 2.0
+        }
+    );
+    same_point(s.origin.xyz, [0.0, 0.0, 1.0]);
+    same_point(s.origin.rpy, [0.0; 3]);
+}
+
+#[test]
+fn a_cylinder_fromto_is_turned_from_z_onto_the_segment() {
+    let r = robot(
+        "<mujoco><worldbody><body name=\"a\">\
+         <geom type=\"cylinder\" size=\"0.1\" fromto=\"0 0 0 2 0 0\"/>\
+         </body></worldbody></mujoco>",
+    );
+    let s = &r.links[1].shapes[0];
+    assert_eq!(
+        s.geometry,
+        Geometry::Cylinder {
+            radius: 0.1,
+            length: 2.0
+        }
+    );
+    same_point(s.origin.xyz, [1.0, 0.0, 0.0]);
+    same_point(s.origin.rpy, [0.0, std::f64::consts::FRAC_PI_2, 0.0]);
+}
+
+#[test]
+fn a_later_joint_at_another_pos_is_reported_as_lost() {
+    let r = robot(
+        r#"<mujoco><worldbody>
+  <body name="a"><joint name="j" pos="0 0 1"/><joint name="k" pos="0 0 2"/><joint name="m" pos="0 0 1"/></body>
+</worldbody></mujoco>"#,
+    );
+    let lost: Vec<_> = r
+        .unmapped
+        .iter()
+        .map(|u| (u.what.as_str(), u.name.as_deref()))
+        .collect();
+    assert_eq!(lost, [("joint/pos", Some("k"))]);
+}
+
+#[test]
+fn a_fromto_with_no_length_is_an_error() {
+    let err = parse_mjcf(
+        "<mujoco><worldbody><body name=\"a\">\
+         <geom type=\"capsule\" size=\"0.1\" fromto=\"1 1 1 1 1 1\"/>\
+         </body></worldbody></mujoco>",
+        &NoFiles,
+    )
+    .and_then(|m| m.to_robot())
+    .unwrap_err();
+    assert!(err.0.contains("`fromto` has no direction"), "{}", err.0);
+}
+
 #[test]
 fn geom_pos_is_the_shape_origin_and_default_class_values_apply() {
     let r = robot(
@@ -552,7 +655,7 @@ fn geoms_the_model_cannot_hold_stay_unmapped() {
         "<mujoco><worldbody><body name=\"a\">\
          <geom name=\"e\" type=\"ellipsoid\" size=\"1 2 3\"/>\
          <geom name=\"p\" type=\"plane\" size=\"1 1 1\"/>\
-         <geom name=\"f\" type=\"capsule\" size=\"1\" fromto=\"0 0 0 1 0 0\"/>\
+         <geom name=\"f\" type=\"box\" size=\"1\" fromto=\"0 0 0 1 0 0\"/>\
          <geom name=\"s\" type=\"box\" size=\"1 2\"/>\
          </body></worldbody></mujoco>",
     );

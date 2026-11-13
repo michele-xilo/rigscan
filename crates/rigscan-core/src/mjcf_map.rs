@@ -115,17 +115,24 @@ impl Mapper {
                     span: world.anchor,
                 });
             }
-            self.contents(world, "world", 0)?;
+            self.contents(world, "world", 0, [0.0; 3])?;
         }
         Ok(())
     }
 
     /// Bodies and geoms inside a body (or the worldbody) whose link is `parent` at index `link`.
-    fn contents(&mut self, node: &MjcfNode, parent: &str, link: usize) -> Result<(), ParseError> {
+    /// `offset` is where the link frame sits in the body frame: the position of the body's joint.
+    fn contents(
+        &mut self,
+        node: &MjcfNode,
+        parent: &str,
+        link: usize,
+        offset: [f64; 3],
+    ) -> Result<(), ParseError> {
         for c in &node.children {
             match c.tag.as_str() {
-                "body" => self.body(c, parent)?,
-                "geom" => self.geom(c, link)?,
+                "body" => self.body(c, parent, offset)?,
+                "geom" => self.geom(c, link, offset)?,
                 t if UNEXPANDED.contains(&t) => self.lose(t, c.attr("name"), c),
                 _ => {}
             }
@@ -133,7 +140,7 @@ impl Mapper {
         Ok(())
     }
 
-    fn body(&mut self, node: &MjcfNode, parent: &str) -> Result<(), ParseError> {
+    fn body(&mut self, node: &MjcfNode, parent: &str, offset: [f64; 3]) -> Result<(), ParseError> {
         let name = match node.attr("name") {
             Some(n) => n.to_string(),
             None => unique(
@@ -142,8 +149,22 @@ impl Mapper {
             ),
         };
         let link = self.robot.links.len();
+        // URDF puts the link frame on its joint; MJCF keeps it on the body and moves the joint by `pos`.
+        let joints: Vec<&MjcfNode> = node
+            .children
+            .iter()
+            .filter(|c| c.tag == "joint" || c.tag == "freejoint")
+            .collect();
+        let anchor = match joints.first() {
+            Some(j) => numbers(j, "pos", 3)?.map_or([0.0; 3], |v| [v[0], v[1], v[2]]),
+            None => [0.0; 3],
+        };
         let inertial = match children(node, "inertial").next() {
-            Some(i) => Some(self.inertial(i)?),
+            Some(i) => {
+                let mut inertial = self.inertial(i)?;
+                inertial.origin.xyz = sub(inertial.origin.xyz, anchor);
+                Some(inertial)
+            }
             None => None,
         };
         self.robot.links.push(Link {
@@ -152,24 +173,21 @@ impl Mapper {
             shapes: Vec::new(),
             span: node.anchor,
         });
+        let pos = numbers(node, "pos", 3)?.map_or([0.0; 3], |v| [v[0], v[1], v[2]]);
+        let rotation = self.rotation(node)?;
         let origin = Origin {
-            xyz: match numbers(node, "pos", 3)? {
-                Some(v) => [v[0], v[1], v[2]],
-                None => [0.0; 3],
-            },
-            rpy: self.orientation(node)?,
+            xyz: add(sub(pos, offset), turn(&rotation, anchor)),
+            rpy: rpy(&rotation),
         };
-        let mut any = false;
-        for j in node
-            .children
-            .iter()
-            .filter(|c| c.tag == "joint" || c.tag == "freejoint")
-        {
-            any = true;
+        for j in &joints {
+            // Only the first joint places the link frame; a later one elsewhere cannot be held.
+            if numbers(j, "pos", 3)?.is_some_and(|v| v != anchor) {
+                self.lose("joint/pos", j.attr("name"), j);
+            }
             let joint = self.joint(j, parent, &name, origin)?;
             self.robot.joints.push(joint);
         }
-        if !any {
+        if joints.is_empty() {
             let joint_name = unique(&name, &mut self.joint_names);
             self.robot.joints.push(Joint {
                 name: joint_name,
@@ -184,7 +202,7 @@ impl Mapper {
                 span: node.anchor,
             });
         }
-        self.contents(node, &name, link)
+        self.contents(node, &name, link, anchor)
     }
 
     fn joint(
@@ -285,8 +303,12 @@ impl Mapper {
         })
     }
 
-    /// The `rpy` of whichever orientation attribute `node` carries, in MuJoCo's priority order.
     fn orientation(&self, node: &MjcfNode) -> Result<[f64; 3], ParseError> {
+        Ok(rpy(&self.rotation(node)?))
+    }
+
+    /// The rotation of whichever orientation attribute `node` carries, in MuJoCo's priority order.
+    fn rotation(&self, node: &MjcfNode) -> Result<Mat, ParseError> {
         let bad = |key: &str| position_error(node, format!("attribute `{key}` has no direction"));
         let matrix = if let Some(q) = numbers(node, "quat", 4)? {
             from_quat([q[0], q[1], q[2], q[3]]).ok_or_else(|| bad("quat"))?
@@ -300,9 +322,9 @@ impl Mapper {
         } else if let Some(z) = numbers(node, "zaxis", 3)? {
             from_zaxis([z[0], z[1], z[2]]).ok_or_else(|| bad("zaxis"))?
         } else {
-            return Ok([0.0; 3]);
+            return Ok(about(0, 0.0));
         };
-        Ok(rpy(&matrix))
+        Ok(matrix)
     }
 
     fn euler(&self, node: &MjcfNode, angles: &[f64]) -> Result<Mat, ParseError> {
@@ -328,7 +350,7 @@ impl Mapper {
         Ok(r)
     }
 
-    fn geom(&mut self, node: &MjcfNode, link: usize) -> Result<(), ParseError> {
+    fn geom(&mut self, node: &MjcfNode, link: usize, offset: [f64; 3]) -> Result<(), ParseError> {
         let name = node.attr("name");
         let geometry = match node.attr("mesh") {
             Some(m) => match self.meshes.get(m) {
@@ -341,6 +363,12 @@ impl Mapper {
             },
             None => primitive(node)?,
         };
+        let segment = if geometry.is_none() {
+            segment(node)?
+        } else {
+            None
+        };
+        let geometry = geometry.or_else(|| segment.as_ref().map(|s| s.0.clone()));
         let Some(geometry) = geometry else {
             self.lose("geom", name, node);
             return Ok(());
@@ -358,8 +386,15 @@ impl Mapper {
         } else {
             Role::Both
         };
-        let xyz = numbers(node, "pos", 3)?.map_or([0.0; 3], |v| [v[0], v[1], v[2]]);
-        let rpy = self.orientation(node)?;
+        // MuJoCo ignores pos and the orientation attributes on a geom with fromto.
+        let (xyz, rpy) = match &segment {
+            Some((_, middle, rotation)) => (*middle, rpy(rotation)),
+            None => (
+                numbers(node, "pos", 3)?.map_or([0.0; 3], |v| [v[0], v[1], v[2]]),
+                self.orientation(node)?,
+            ),
+        };
+        let xyz = sub(xyz, offset);
         self.robot.links[link].shapes.push(Shape {
             role,
             geometry,
@@ -424,6 +459,39 @@ fn unique(base: &str, taken: &mut HashSet<String>) -> String {
 
 /// A primitive geom's shape, or `None` when the model cannot hold it (`fromto`, ellipsoid, plane,
 /// heightfield, sdf, or a size with too few numbers). MuJoCo sizes are half extents.
+fn add(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+}
+
+fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+fn turn(r: &Mat, v: [f64; 3]) -> [f64; 3] {
+    [0, 1, 2].map(|i| r[i][0] * v[0] + r[i][1] * v[1] + r[i][2] * v[2])
+}
+
+/// A capsule or cylinder given by its end points: the shape, the middle of the segment and the
+/// rotation that turns Z onto it. Other types with `fromto` are not held.
+fn segment(node: &MjcfNode) -> Result<Option<(Geometry, [f64; 3], Mat)>, ParseError> {
+    let Some(ends) = numbers(node, "fromto", 6)? else {
+        return Ok(None);
+    };
+    let size = list(node, "size")?.unwrap_or_default();
+    let (from, to) = ([ends[0], ends[1], ends[2]], [ends[3], ends[4], ends[5]]);
+    let along = sub(to, from);
+    let length = along.iter().map(|c| c * c).sum::<f64>().sqrt();
+    let geometry = match (node.attr("type"), size.first()) {
+        (Some("capsule"), Some(&radius)) => Geometry::Capsule { radius, length },
+        (Some("cylinder"), Some(&radius)) => Geometry::Cylinder { radius, length },
+        _ => return Ok(None),
+    };
+    let rotation = from_zaxis(along)
+        .ok_or_else(|| position_error(node, "attribute `fromto` has no direction".to_string()))?;
+    let middle = add(from, along.map(|c| c / 2.0));
+    Ok(Some((geometry, middle, rotation)))
+}
+
 fn primitive(node: &MjcfNode) -> Result<Option<Geometry>, ParseError> {
     if node.attr("fromto").is_some() {
         return Ok(None);

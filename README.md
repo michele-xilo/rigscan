@@ -30,6 +30,8 @@ No config and no simulator needed. Exit code 0 means no critical findings and 1 
 CI step. To try it on a robot with known problems, run it on [examples/broken_arm.urdf](examples/broken_arm.urdf).
 Every option and output format (`text`, `full`, `report`, `json`) is in [docs/usage.md](docs/usage.md).
 
+To convert between URDF and MJCF and see what was lost: `rigscan convert robot.urdf --to mjcf -o robot.xml`.
+
 ## Try it in your browser
 
 The [viewer](https://michele-xilo.github.io/rigscan/) runs Rigscan as WebAssembly: drop a URDF, MJCF or USD file (or a

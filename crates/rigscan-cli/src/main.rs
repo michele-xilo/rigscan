@@ -6,7 +6,8 @@ use clap::{Parser, Subcommand, ValueEnum};
 use output::Scanned;
 use rayon::prelude::*;
 use rigscan_core::{
-    lint_mjcf, lint_usd, lint_with, parse_mjcf, parse_urdf, parse_usd, Format, Severity,
+    lint_mjcf, lint_usd, lint_with, parse_mjcf, parse_urdf, parse_usd, write_mjcf, write_urdf,
+    Converted, Format, Geometry, Robot, Severity, Unmapped,
 };
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -42,6 +43,12 @@ enum ColorChoice {
     Never,
 }
 
+#[derive(Clone, Copy, ValueEnum)]
+enum Target {
+    Urdf,
+    Mjcf,
+}
+
 #[derive(Subcommand)]
 enum Command {
     /// Scan robot description files and report findings
@@ -59,6 +66,15 @@ enum Command {
         #[arg(long)]
         statistics: bool,
     },
+    /// Convert a robot description to another format and list what was lost
+    Convert {
+        input: PathBuf,
+        #[arg(long, value_enum)]
+        to: Target,
+        /// Write the result to this file instead of stdout
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -70,6 +86,117 @@ fn main() -> ExitCode {
             quiet,
             statistics,
         } => scan(&paths, output_format, color, quiet, statistics),
+        Command::Convert { input, to, output } => convert(&input, to, output.as_deref()),
+    }
+}
+
+/// Exit codes: 0 nothing lost, 1 something lost, 2 the input was refused or the output not written.
+fn convert(input: &Path, to: Target, output: Option<&Path>) -> ExitCode {
+    let refuse = |msg: String| {
+        eprintln!("{msg}");
+        ExitCode::from(2)
+    };
+    let scanned = match scan_file(input) {
+        Ok(s) => s,
+        Err(msg) => return refuse(msg),
+    };
+    let (target, name) = match to {
+        Target::Urdf => (Format::Urdf, "URDF"),
+        Target::Mjcf => (Format::Mjcf, "MJCF"),
+    };
+    if scanned.format == target {
+        return refuse(format!("{}: already {name}", input.display()));
+    }
+    let critical: Vec<_> = scanned
+        .findings
+        .iter()
+        // Mesh files are only referenced, so one that is not on disk does not stop a conversion.
+        .filter(|f| f.severity == Severity::Critical && f.rule != "RS014")
+        .collect();
+    if !critical.is_empty() {
+        for f in &critical {
+            eprintln!("{}", output::format_finding(input, f, false));
+        }
+        return refuse(format!(
+            "{}: not converted, fix the findings above",
+            input.display()
+        ));
+    }
+    let mut robot = scanned.robot;
+    if let Some(path) = output {
+        rebase_meshes(&mut robot, input, path);
+    }
+    let converted = match to {
+        Target::Urdf => write_urdf(&robot),
+        Target::Mjcf => write_mjcf(&robot),
+    };
+    let written = match output {
+        Some(path) => {
+            std::fs::write(path, &converted.text).map_err(|e| format!("{}: {e}", path.display()))
+        }
+        None => std::io::stdout()
+            .lock()
+            .write_all(converted.text.as_bytes())
+            .map_err(|e| e.to_string()),
+    };
+    if let Err(msg) = written {
+        return refuse(msg);
+    }
+    report_losses(&converted);
+    ExitCode::from(u8::from(!converted.lost.is_empty()))
+}
+
+/// Mesh files are only referenced, so a relative path must still reach the file from where the
+/// output is written. Paths with a scheme (`package://`) or already absolute are left alone.
+fn rebase_meshes(robot: &mut Robot, input: &Path, output: &Path) {
+    let dir = |p: &Path| {
+        p.parent()
+            .map(|d| {
+                if d.as_os_str().is_empty() {
+                    Path::new(".")
+                } else {
+                    d
+                }
+            })
+            .and_then(|d| d.canonicalize().ok())
+    };
+    let (Some(from), Some(to)) = (dir(input), dir(output)) else {
+        return;
+    };
+    if from == to {
+        return;
+    }
+    let common = from
+        .components()
+        .zip(to.components())
+        .take_while(|(a, b)| a == b)
+        .count();
+    let mut prefix = PathBuf::new();
+    for _ in to.components().skip(common) {
+        prefix.push("..");
+    }
+    prefix.extend(from.components().skip(common));
+    for g in robot.links.iter_mut().flat_map(|l| &mut l.shapes) {
+        if let Geometry::Mesh { filename, .. } = &mut g.geometry {
+            if !filename.contains("://") && Path::new(filename.as_str()).is_relative() {
+                *filename = prefix.join(&*filename).to_string_lossy().into_owned();
+            }
+        }
+    }
+}
+
+/// One line per kind of loss, with the names it hit.
+fn report_losses(converted: &Converted) {
+    let mut kinds: Vec<(&str, Vec<&str>)> = Vec::new();
+    for Unmapped { what, name, .. } in &converted.lost {
+        let name = name.as_deref().unwrap_or("-");
+        match kinds.iter_mut().find(|(k, _)| k == what) {
+            Some((_, names)) => names.push(name),
+            None => kinds.push((what, vec![name])),
+        }
+    }
+    for (what, names) in kinds {
+        eprintln!("lost {what}: {}", names.join(", "));
     }
 }
 

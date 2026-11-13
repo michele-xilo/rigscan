@@ -54,7 +54,7 @@ USD has no source positions, so findings name the file only and JSON `line` and 
 | MJCF | element tree with `include`s and `default` classes applied; bodies, joints, geoms (primitives and meshes), inertials, orientation | RS001-RS018 |
 | USD (UsdPhysics) | rigid bodies, joints, mass, centre of mass, joint axes and limits, composed from references, payloads and sublayers; `.usda` and `.usdc` | RS008-RS012, RS019-RS022 |
 
-What a model cannot hold (actuators, tendons, materials, USD collision shapes and so on) is kept in the robot's
+What a model cannot hold (actuators, tendons, materials, USD collision meshes and so on) is kept in the robot's
 `unmapped` list, which the conversion loss report will use.
 
 ## Library

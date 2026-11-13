@@ -1,6 +1,7 @@
 //! USD reader: UsdPhysics bodies and joints read from a composed stage.
 
-use crate::model::{ParseError, Span, Unmapped};
+use crate::model::{Geometry, Origin, ParseError, Role, Span, Unmapped};
+use crate::usd_shapes;
 use openusd::ar::{self, ResolvedPath};
 use openusd::sdf::Value;
 use openusd::usd::{Prim, PrimPredicate, Stage};
@@ -47,9 +48,19 @@ pub struct UsdJoint {
     pub upper: Option<f64>,
 }
 
+/// A primitive gprim, placed in the frame of the body above it. Lengths are in stage units.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UsdShape {
+    pub body: String,
+    pub geometry: Geometry,
+    pub role: Role,
+    pub origin: Origin,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Usd {
     pub bodies: Vec<UsdBody>,
+    pub shapes: Vec<UsdShape>,
     pub joints: Vec<UsdJoint>,
     pub unmapped: Vec<Unmapped>,
     /// `metersPerUnit` of the stage; lengths in this struct are in stage units, so 1 when absent.
@@ -153,6 +164,7 @@ fn read(stage: &Stage) -> openusd::Result<Usd> {
     stage.traverse(PrimPredicate::DEFAULT, |p| paths.push(p.clone()))?;
     let mut usd = Usd {
         bodies: Vec::new(),
+        shapes: Vec::new(),
         joints: Vec::new(),
         unmapped: Vec::new(),
         meters_per_unit: unit(stage, "metersPerUnit")?,
@@ -194,6 +206,8 @@ fn read(stage: &Stage) -> openusd::Result<Usd> {
             });
         }
     }
+    let names: Vec<String> = paths.iter().map(|p| p.as_str().to_string()).collect();
+    usd_shapes::read(stage, &names, &mut usd);
     usd.composition_errors = stage
         .composition_errors()
         .iter()
@@ -323,7 +337,10 @@ fn prim_data(
     }
     if has("PhysicsCollisionAPI") {
         colliders.push(path.to_string());
-        lose(usd, "collision", path);
+        // A primitive becomes a shape; usd_shapes lists it as lost only when it cannot be one.
+        if !matches!(ty.as_str(), "Cube" | "Sphere" | "Cylinder" | "Capsule") {
+            lose(usd, "collision", path);
+        }
     }
     if apis.iter().any(|a| a.starts_with("PhysicsDriveAPI")) {
         lose(usd, "drive", path);
@@ -354,7 +371,7 @@ fn lose(usd: &mut Usd, what: &str, path: &str) {
     });
 }
 
-fn number(v: Value) -> Option<f64> {
+pub(crate) fn number(v: Value) -> Option<f64> {
     match v {
         Value::Float(x) => Some(f64::from(x)),
         Value::Double(x) => Some(x),
@@ -372,7 +389,7 @@ fn axis(v: Value) -> Option<[f64; 3]> {
     }
 }
 
-fn vec3(v: Value) -> Option<[f64; 3]> {
+pub(crate) fn vec3(v: Value) -> Option<[f64; 3]> {
     match v {
         Value::Vec3f(v) => Some([f64::from(v.x), f64::from(v.y), f64::from(v.z)]),
         Value::Vec3d(v) => Some([v.x, v.y, v.z]),
@@ -381,7 +398,7 @@ fn vec3(v: Value) -> Option<[f64; 3]> {
 }
 
 /// A non-zero quaternion as w, x, y, z.
-fn quat(v: &Value) -> Option<[f64; 4]> {
+pub(crate) fn quat(v: &Value) -> Option<[f64; 4]> {
     let q = match v {
         Value::Quatf(q) => [q.w, q.x, q.y, q.z].map(f64::from),
         Value::Quatd(q) => [q.w, q.x, q.y, q.z],

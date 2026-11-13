@@ -96,7 +96,7 @@ in input order so output is deterministic. The summary line is on stderr to keep
   `line:col:`. A scan stops at the first one. If users want all problems
   reported at once, make these findings instead.
 - MJCF puts the link frame on the body and offsets the joint by `pos`; the model puts it on the joint, as URDF does. The first joint's `pos` is added to the joint origin and subtracted from the link's shapes, inertial and child bodies. A later joint on the same body at a different `pos` is `unmapped` as `joint/pos`. A capsule or cylinder with `fromto` is read as a shape centred on the segment.
-- Not yet: USD shapes, MJCF ellipsoid/plane/hfield/sdf geoms and `fromto` on other types, actuators, `metersPerUnit`.
+- Not yet: USD shapes, MJCF ellipsoid/plane/hfield/sdf geoms and `fromto` on other types, actuators.
 
 Known risk for #11: an MJCF body can have several joints to its parent, or
 none. The model has one parent/child edge per joint, so RS004 would flag
@@ -160,8 +160,9 @@ body (a ground collider); a joint target that does not exist is not added, so RS
 is one `Joint` from `body0` to `body1`; an empty end is the root link `world`, added only when a joint needs it.
 `PhysicsRevoluteJoint` is `Revolute` with a limit and `Continuous` without (limits are degrees in USD and become
 radians); prismatic limits stay as authored; fixed is `Fixed`; any other type is `Other` named after the type
-(`spherical`, `distance`, `joint`). `localPos0` is the joint origin, in stage units (`metersPerUnit` is not
-applied). A mass or diagonal inertia of zero means "computed from shapes" in USD and stays `None`.
+(`spherical`, `distance`, `joint`). `localPos0` is the joint origin. `Usd` holds values in stage units; `to_robot` scales lengths by
+`metersPerUnit` and masses by `kilogramsPerUnit` (inertia by both, mass times length squared), and prismatic limits too.
+A `upAxis` of `Y` and a non-zero `localPos1` are `unmapped`. A mass or diagonal inertia of zero means "computed from shapes" in USD and stays `None`.
 
 USD has no source positions, so every span is `Span::NONE` (line 0): the CLI prints the file path alone in `text`,
 `full` and `report`, and JSON `line` and `column` are `null`. `Robot.unmapped` lists scenes, collision shapes, drives,

@@ -52,6 +52,10 @@ pub struct Usd {
     pub bodies: Vec<UsdBody>,
     pub joints: Vec<UsdJoint>,
     pub unmapped: Vec<Unmapped>,
+    /// `metersPerUnit` of the stage; lengths in this struct are in stage units, so 1 when absent.
+    pub meters_per_unit: f64,
+    /// `kilogramsPerUnit` of the stage, 1 when absent.
+    pub kilograms_per_unit: f64,
     /// Prims with `PhysicsArticulationRootAPI`.
     pub articulation_roots: Vec<String>,
     /// References, payloads and sublayers the loader could not supply, and other composition problems.
@@ -151,9 +155,19 @@ fn read(stage: &Stage) -> openusd::Result<Usd> {
         bodies: Vec::new(),
         joints: Vec::new(),
         unmapped: Vec::new(),
+        meters_per_unit: unit(stage, "metersPerUnit")?,
+        kilograms_per_unit: unit(stage, "kilogramsPerUnit")?,
         articulation_roots: Vec::new(),
         composition_errors: Vec::new(),
     };
+    // The model is not rotated to Z up, so a Y-up stage is reported rather than drawn on its side.
+    if matches!(stage.stage_metadata("upAxis")?, Some(Value::Token(t)) if t.as_str() == "Y") {
+        usd.unmapped.push(Unmapped {
+            what: "upAxis".to_string(),
+            name: None,
+            span: Span::NONE,
+        });
+    }
     let mut targets = Vec::new();
     let mut colliders = Vec::new();
     let prims = paths
@@ -294,6 +308,12 @@ fn prim_data(
         if attr("physics:localRot1").is_some_and(|q| !is_identity(&q)) {
             lose(usd, "localRot1", path);
         }
+        if attr("physics:localPos1")
+            .and_then(vec3)
+            .is_some_and(|p| p != [0.0; 3])
+        {
+            lose(usd, "localPos1", path);
+        }
     }
     if ty == "PhysicsScene" {
         lose(usd, "scene", path);
@@ -315,6 +335,15 @@ fn prim_data(
         lose(usd, "principalAxes", path);
     }
     Ok(())
+}
+
+/// A stage unit scale, or 1 when it is absent or not a positive number.
+fn unit(stage: &Stage, key: &str) -> openusd::Result<f64> {
+    Ok(stage
+        .stage_metadata(key)?
+        .and_then(number)
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .unwrap_or(1.0))
 }
 
 fn lose(usd: &mut Usd, what: &str, path: &str) {

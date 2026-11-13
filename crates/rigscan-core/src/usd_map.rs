@@ -24,19 +24,20 @@ impl Usd {
         {
             robot.links.push(link(WORLD, None));
         }
+        let (m, kg) = (self.meters_per_unit, self.kilograms_per_unit);
         for b in &self.bodies {
             let inertial = (b.mass.is_some() || b.inertia.is_some()).then(|| Inertial {
-                mass: b.mass,
+                mass: b.mass.map(|v| v * kg),
                 inertia: b.inertia.map(|d| Inertia {
-                    ixx: d[0],
-                    iyy: d[1],
-                    izz: d[2],
+                    ixx: d[0] * kg * m * m,
+                    iyy: d[1] * kg * m * m,
+                    izz: d[2] * kg * m * m,
                     ixy: 0.0,
                     ixz: 0.0,
                     iyz: 0.0,
                 }),
                 origin: Origin {
-                    xyz: b.center_of_mass.unwrap_or([0.0; 3]),
+                    xyz: b.center_of_mass.unwrap_or([0.0; 3]).map(|v| v * m),
                     ..Origin::default()
                 },
                 span: Span::NONE,
@@ -44,7 +45,7 @@ impl Usd {
             robot.links.push(link(&b.path, inertial));
         }
         for j in &self.joints {
-            robot.joints.push(joint(j));
+            robot.joints.push(joint(j, m));
         }
         Ok(robot)
     }
@@ -59,14 +60,14 @@ fn link(name: &str, inertial: Option<Inertial>) -> Link {
     }
 }
 
-fn joint(j: &crate::usd::UsdJoint) -> Joint {
+fn joint(j: &crate::usd::UsdJoint, meters: f64) -> Joint {
     let revolute = j.type_name == "PhysicsRevoluteJoint";
     let limited = j.lower.is_some() || j.upper.is_some();
-    // USD authors revolute limits in degrees.
+    // USD authors revolute limits in degrees and prismatic ones in stage units.
     let scale = if revolute {
         std::f64::consts::PI / 180.0
     } else {
-        1.0
+        meters
     };
     let kind = match j.type_name.as_str() {
         "PhysicsRevoluteJoint" if limited => JointKind::Revolute,
@@ -93,7 +94,7 @@ fn joint(j: &crate::usd::UsdJoint) -> Joint {
         child: j.body1.clone().unwrap_or_else(|| WORLD.into()),
         kind,
         origin: Origin {
-            xyz: j.local_pos0,
+            xyz: j.local_pos0.map(|v| v * meters),
             rpy: joint_rpy(j.local_rot0),
         },
         limit,

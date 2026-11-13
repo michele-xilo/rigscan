@@ -577,3 +577,93 @@ def Xform "r"
     let ground = r.links.iter().find(|l| l.name == "/r/ground").unwrap();
     assert_eq!(ground.inertial, None);
 }
+
+const UNITS: &str = r#"#usda 1.0
+(
+    metersPerUnit = 0.01
+    kilogramsPerUnit = 0.001
+    upAxis = "Z"
+)
+def Xform "a" (prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"])
+{
+    float physics:mass = 2000
+    float3 physics:diagonalInertia = (1, 2, 3)
+    point3f physics:centerOfMass = (0, 0, 10)
+}
+def Xform "b" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {}
+def PhysicsPrismaticJoint "slide"
+{
+    rel physics:body0 = </a>
+    rel physics:body1 = </b>
+    point3f physics:localPos0 = (0, 0, 50)
+    float physics:lowerLimit = 0
+    float physics:upperLimit = 20
+}
+def PhysicsRevoluteJoint "turn"
+{
+    rel physics:body0 = </a>
+    rel physics:body1 = </b>
+    float physics:lowerLimit = -90
+    float physics:upperLimit = 90
+}
+"#;
+
+#[test]
+fn lengths_and_masses_are_converted_from_the_stage_units() {
+    let r = robot(UNITS);
+    let a = r.links.iter().find(|l| l.name == "/a").unwrap();
+    let inertial = a.inertial.as_ref().unwrap();
+    assert!(near(inertial.mass.unwrap(), 2.0), "{inertial:?}");
+    let i = inertial.inertia.unwrap();
+    assert!(
+        near(i.ixx, 1e-7) && near(i.iyy, 2e-7) && near(i.izz, 3e-7),
+        "{i:?}"
+    );
+    assert!(near(inertial.origin.xyz[2], 0.1), "{inertial:?}");
+    let slide = r.joints.iter().find(|j| j.name == "/slide").unwrap();
+    assert!(near(slide.origin.xyz[2], 0.5), "{:?}", slide.origin);
+    let limit = slide.limit.as_ref().unwrap();
+    assert!(near(limit.upper.unwrap(), 0.2), "{limit:?}");
+    let turn = r.joints.iter().find(|j| j.name == "/turn").unwrap();
+    let half_pi = std::f64::consts::FRAC_PI_2;
+    assert!(near(turn.limit.as_ref().unwrap().upper.unwrap(), half_pi));
+}
+
+#[test]
+fn a_y_up_stage_is_listed_as_lost_and_a_z_up_stage_is_not() {
+    let up = |axis: &str| {
+        robot(&format!(
+            "#usda 1.0\n(\n    upAxis = \"{axis}\"\n)\ndef Xform \"a\" (prepend apiSchemas = [\"PhysicsRigidBodyAPI\"]) {{}}\n"
+        ))
+        .unmapped
+        .iter()
+        .map(|u| u.what.clone())
+        .collect::<Vec<_>>()
+    };
+    assert_eq!(up("Y"), ["upAxis"]);
+    assert!(up("Z").is_empty());
+}
+
+#[test]
+fn a_local_pos1_is_listed_as_lost_unless_zero() {
+    let lost = |pos1: &str| {
+        robot(&format!(
+            r#"#usda 1.0
+def Xform "a" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {{}}
+def Xform "b" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {{}}
+def PhysicsFixedJoint "j"
+{{
+    rel physics:body0 = </a>
+    rel physics:body1 = </b>
+    point3f physics:localPos1 = {pos1}
+}}
+"#
+        ))
+        .unmapped
+        .iter()
+        .map(|u| u.what.clone())
+        .collect::<Vec<_>>()
+    };
+    assert_eq!(lost("(0, 0, 0.2)"), ["localPos1"]);
+    assert!(lost("(0, 0, 0)").is_empty());
+}

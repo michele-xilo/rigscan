@@ -13,6 +13,7 @@ mod urdf;
 mod usd;
 mod usd_map;
 mod usd_rules;
+mod usd_shapes;
 
 pub use files::{Resolution, Resolver};
 pub use lint::{lint, lint_with, Finding, Severity};
@@ -24,5 +25,5 @@ pub use model::{
 };
 pub use report::{report, ElementStatus, Report, Status, Verdict};
 pub use urdf::parse_urdf;
-pub use usd::{parse_usd, Usd, UsdBody, UsdJoint, UsdLoader};
+pub use usd::{parse_usd, Usd, UsdBody, UsdJoint, UsdLoader, UsdShape};
 pub use usd_rules::lint_usd;

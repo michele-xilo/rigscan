@@ -83,7 +83,7 @@ in input order so output is deterministic. The summary line is on stderr to keep
   `Shape { role, geometry, origin, span }` from URDF `<visual>`/`<collision>` and MJCF geoms: `Geometry` is box, sphere,
   cylinder, capsule (full extents; MJCF half sizes are doubled) or mesh with scale; `span` is the geometry element.
   `Link::meshes()` yields the mesh files and spans for RS014. An MJCF geom is `Visual` when `contype` and
-  `conaffinity` are 0, else `Collision` in group 3 or higher (hidden by default), else `Both`. USD shapes are not read yet (collision stays `unmapped`) (#5, #73).
+  `conaffinity` are 0, else `Collision` in group 3 or higher (hidden by default), else `Both`. A USD `Cube`, `Sphere`, `Cylinder` or `Capsule` under a body is a shape in that body's frame (prim xform stack of translate, scale, orient, rotate and transform ops, with `!invert!` and `!resetXformStack!`): `Visual`, `Both` with `PhysicsCollisionAPI`, or `Collision` when that prim is a guide, a proxy or invisible. USD meshes and other gprims are not read (#5, #73).
 - `Joint { name, parent, child, kind, origin, limit, mimic, axis, dynamics, span }`: `axis` is the resolved axis as
   authored, not normalized (URDF default x, MJCF hinge/slide default z, USD token X/Y/Z default x), set for revolute,
   continuous and prismatic joints and `None` for fixed and floating; `dynamics` is damping and friction (URDF
@@ -96,7 +96,7 @@ in input order so output is deterministic. The summary line is on stderr to keep
   `line:col:`. A scan stops at the first one. If users want all problems
   reported at once, make these findings instead.
 - MJCF puts the link frame on the body and offsets the joint by `pos`; the model puts it on the joint, as URDF does. The first joint's `pos` is added to the joint origin and subtracted from the link's shapes, inertial and child bodies. A later joint on the same body at a different `pos` is `unmapped` as `joint/pos`. A capsule or cylinder with `fromto` is read as a shape centred on the segment.
-- Not yet: USD shapes, MJCF ellipsoid/plane/hfield/sdf geoms and `fromto` on other types, actuators.
+- Not yet: USD mesh shapes, MJCF ellipsoid/plane/hfield/sdf geoms and `fromto` on other types, actuators.
 
 Known risk for #11: an MJCF body can have several joints to its parent, or
 none. The model has one parent/child edge per joint, so RS004 would flag
@@ -164,7 +164,7 @@ radians); prismatic limits are in stage units; fixed is `Fixed`; any other type 
 `metersPerUnit` and masses by `kilogramsPerUnit` (inertia by both, mass times length squared), and prismatic limits too. An `upAxis` of `Y` and a non-zero `localPos1` are `unmapped`. A mass or diagonal inertia of zero means "computed from shapes" in USD and stays `None`.
 
 USD has no source positions, so every span is `Span::NONE` (line 0): the CLI prints the file path alone in `text`,
-`full` and `report`, and JSON `line` and `column` are `null`. `Robot.unmapped` lists scenes, collision shapes, drives,
+`full` and `report`, and JSON `line` and `column` are `null`. `Robot.unmapped` lists scenes, collision prims that are not a primitive shape or whose scale the model cannot hold (non-uniform on a sphere, or across a cylinder or capsule axis), drives,
 materials, `principalAxes`, a non-identity `localRot1` and a `localRot0` that is not a usable quaternion. The CLI's `FsUsdLoader` records the layers
 read, and a directory scan drops a file that another scanned file pulled in, like MJCF includes.
 

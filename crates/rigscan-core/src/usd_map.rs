@@ -1,7 +1,8 @@
 //! Maps the UsdPhysics data onto the format-neutral [`Robot`].
 
 use crate::model::{
-    Format, Inertia, Inertial, Joint, JointKind, Limit, Link, Origin, ParseError, Robot, Span,
+    Format, Inertia, Inertial, Joint, JointKind, Limit, Link, Origin, ParseError, Robot, Shape,
+    Span,
 };
 use crate::rotation::{from_quat, rpy};
 use crate::usd::Usd;
@@ -43,6 +44,16 @@ impl Usd {
                 span: Span::NONE,
             });
             robot.links.push(link(&b.path, inertial));
+        }
+        for sh in &self.shapes {
+            if let Some(link) = robot.links.iter_mut().find(|l| l.name == sh.body) {
+                link.shapes.push(Shape {
+                    role: sh.role,
+                    geometry: sh.geometry.clone(),
+                    origin: sh.origin,
+                    span: Span::NONE,
+                });
+            }
         }
         for j in &self.joints {
             robot.joints.push(joint(j, m));

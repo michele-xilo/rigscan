@@ -334,3 +334,21 @@ fn package_mesh_paths_are_not_rewritten() {
     let written = fs::read_to_string(root.join("out/m.xml")).unwrap();
     assert!(written.contains("file=\"package://p/a.stl\""), "{written}");
 }
+
+#[test]
+fn shapes_without_a_mesh_and_absolute_paths_survive_a_move() {
+    let urdf = r#"<robot name="m"><link name="a">
+      <visual><geometry><box size="1 1 1"/></geometry></visual>
+      <visual><geometry><mesh filename="/abs/a.stl"/></geometry></visual>
+    </link></robot>"#;
+    let root = tree("moved", &[]);
+    fs::create_dir_all(root.join("in")).unwrap();
+    fs::create_dir_all(root.join("out")).unwrap();
+    fs::write(root.join("in/m.urdf"), urdf).unwrap();
+
+    convert(&root, &["in/m.urdf", "--to", "mjcf", "-o", "out/m.xml"]);
+
+    let written = fs::read_to_string(root.join("out/m.xml")).unwrap();
+    assert!(written.contains("type=\"box\""), "{written}");
+    assert!(written.contains("file=\"/abs/a.stl\""), "{written}");
+}

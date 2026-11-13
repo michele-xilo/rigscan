@@ -284,3 +284,53 @@ fn a_missing_mesh_file_does_not_stop_the_conversion() {
     assert_eq!(out.status.code(), Some(0), "{}", stderr(&out));
     assert!(stdout(&out).contains("file=\"gone.stl\""));
 }
+
+#[test]
+fn output_in_a_missing_directory_exits_two() {
+    let root = tree("nodir", &[("arm.urdf", ARM)]);
+    let out = convert(&root, &["arm.urdf", "--to", "mjcf", "-o", "gone/arm.xml"]);
+
+    assert_eq!(out.status.code(), Some(2));
+    assert!(
+        stderr(&out).starts_with("gone/arm.xml:"),
+        "{}",
+        stderr(&out)
+    );
+}
+
+#[test]
+fn losses_of_one_kind_share_a_line() {
+    let two = WITH_EFFORT.replace(
+        "</robot>",
+        r#"<link name="fore"/>
+  <joint name="elbow" type="revolute">
+    <parent link="upper"/>
+    <child link="fore"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-1" upper="1" effort="10" velocity="2"/>
+  </joint>
+</robot>"#,
+    );
+    let root = tree("grouped", &[("arm.urdf", &two)]);
+    let out = convert(&root, &["arm.urdf", "--to", "mjcf"]);
+
+    assert!(
+        stderr(&out).contains("lost limit/effort: shoulder, elbow"),
+        "{}",
+        stderr(&out)
+    );
+}
+
+#[test]
+fn package_mesh_paths_are_not_rewritten() {
+    let urdf = r#"<robot name="m"><link name="a"><visual><geometry><mesh filename="package://p/a.stl"/></geometry></visual></link></robot>"#;
+    let root = tree("package", &[]);
+    fs::create_dir_all(root.join("in")).unwrap();
+    fs::create_dir_all(root.join("out")).unwrap();
+    fs::write(root.join("in/m.urdf"), urdf).unwrap();
+
+    convert(&root, &["in/m.urdf", "--to", "mjcf", "-o", "out/m.xml"]);
+
+    let written = fs::read_to_string(root.join("out/m.xml")).unwrap();
+    assert!(written.contains("file=\"package://p/a.stl\""), "{written}");
+}

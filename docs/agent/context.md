@@ -159,10 +159,9 @@ each prim with `PhysicsRigidBodyAPI`, named by its prim path, and of each prim a
 body (a ground collider); a joint target that does not exist is not added, so RS001 reports it. Each `Physics*Joint`
 is one `Joint` from `body0` to `body1`; an empty end is the root link `world`, added only when a joint needs it.
 `PhysicsRevoluteJoint` is `Revolute` with a limit and `Continuous` without (limits are degrees in USD and become
-radians); prismatic limits stay as authored; fixed is `Fixed`; any other type is `Other` named after the type
+radians); prismatic limits are in stage units; fixed is `Fixed`; any other type is `Other` named after the type
 (`spherical`, `distance`, `joint`). `localPos0` is the joint origin. `Usd` holds values in stage units; `to_robot` scales lengths by
-`metersPerUnit` and masses by `kilogramsPerUnit` (inertia by both, mass times length squared), and prismatic limits too.
-A `upAxis` of `Y` and a non-zero `localPos1` are `unmapped`. A mass or diagonal inertia of zero means "computed from shapes" in USD and stays `None`.
+`metersPerUnit` and masses by `kilogramsPerUnit` (inertia by both, mass times length squared), and prismatic limits too. An `upAxis` of `Y` and a non-zero `localPos1` are `unmapped`. A mass or diagonal inertia of zero means "computed from shapes" in USD and stays `None`.
 
 USD has no source positions, so every span is `Span::NONE` (line 0): the CLI prints the file path alone in `text`,
 `full` and `report`, and JSON `line` and `column` are `null`. `Robot.unmapped` lists scenes, collision shapes, drives,

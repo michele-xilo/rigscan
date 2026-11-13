@@ -5,6 +5,7 @@ mod lint;
 mod mjcf;
 mod mjcf_map;
 mod mjcf_rules;
+mod mjcf_write;
 mod model;
 mod physics;
 mod report;
@@ -20,6 +21,7 @@ pub use files::{Resolution, Resolver};
 pub use lint::{lint, lint_with, Finding, Severity};
 pub use mjcf::{parse_mjcf, IncludeLoader, Included, Mjcf, MjcfNode, Reference};
 pub use mjcf_rules::lint_mjcf;
+pub use mjcf_write::write_mjcf;
 pub use model::{
     Converted, Dynamics, Element, Format, Geometry, Inertia, Inertial, Joint, JointKind, Limit,
     Link, Mimic, Origin, ParseError, Robot, Role, Shape, Span, Unmapped,

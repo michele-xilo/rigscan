@@ -48,7 +48,8 @@ pub struct UsdJoint {
     pub upper: Option<f64>,
 }
 
-/// A primitive gprim, placed in the frame of the body above it. Lengths are in stage units.
+/// A primitive gprim, placed in the frame of the body above it. Lengths are in metres, unlike the
+/// rest of this struct, because the pose and the size share one scale taken from the prim's xforms.
 #[derive(Debug, Clone, PartialEq)]
 pub struct UsdShape {
     pub body: String,

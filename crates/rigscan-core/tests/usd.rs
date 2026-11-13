@@ -837,3 +837,221 @@ def Xform "b" (prepend apiSchemas = ["PhysicsRigidBodyAPI"])
     assert_eq!(s.geometry, rigscan_core::Geometry::Box { size: [1.0; 3] });
     assert!(near(s.origin.xyz[2], 0.5), "{:?}", s.origin);
 }
+
+fn shape_pose(prim: &str) -> (rigscan_core::Shape, Robot) {
+    let r = shapes_of(prim);
+    (only_shape(&r).clone(), r)
+}
+
+fn at(s: &rigscan_core::Shape, xyz: [f64; 3]) -> bool {
+    s.origin.xyz.iter().zip(xyz).all(|(a, b)| near(*a, b))
+}
+
+fn lost_collisions(r: &Robot) -> usize {
+    r.unmapped.iter().filter(|u| u.what == "collision").count()
+}
+
+#[test]
+fn a_capsule_along_y_is_turned_and_scaled_to_metres() {
+    let r = robot(
+        r#"#usda 1.0
+(
+    metersPerUnit = 0.01
+)
+def Xform "b" (prepend apiSchemas = ["PhysicsRigidBodyAPI"])
+{
+    def Capsule "c" {
+        double radius = 10
+        double height = 50
+        uniform token axis = "Y"
+    }
+}
+"#,
+    );
+    let s = only_shape(&r);
+    assert_eq!(
+        s.geometry,
+        rigscan_core::Geometry::Capsule {
+            radius: 0.1,
+            length: 0.5
+        }
+    );
+    assert!(
+        near(s.origin.rpy[0], -std::f64::consts::FRAC_PI_2),
+        "{:?}",
+        s.origin
+    );
+}
+
+#[test]
+fn a_sphere_is_scaled_evenly_or_not_held() {
+    let (s, _) = shape_pose(
+        r#"def Sphere "s" {
+    double radius = 0.5
+    double3 xformOp:scale = (2, 2, 2)
+    uniform token[] xformOpOrder = ["xformOp:scale"]
+}"#,
+    );
+    assert_eq!(s.geometry, rigscan_core::Geometry::Sphere { radius: 1.0 });
+    let squashed = r#"def Sphere "s" (prepend apiSchemas = ["PhysicsCollisionAPI"]) {
+    double3 xformOp:scale = (1, 2, 1)
+    uniform token[] xformOpOrder = ["xformOp:scale"]
+}"#;
+    let r = shapes_of(squashed);
+    assert!(r
+        .links
+        .iter()
+        .find(|l| l.name == "/b")
+        .unwrap()
+        .shapes
+        .is_empty());
+    assert_eq!(lost_collisions(&r), 1);
+    let r = shapes_of(&squashed.replace("(prepend apiSchemas = [\"PhysicsCollisionAPI\"])", ""));
+    assert_eq!(lost_collisions(&r), 0);
+}
+
+#[test]
+fn a_cylinder_squashed_across_its_axis_is_not_held() {
+    let r = shapes_of(
+        r#"def Cylinder "c" (prepend apiSchemas = ["PhysicsCollisionAPI"]) {
+    double3 xformOp:scale = (1, 2, 1)
+    uniform token[] xformOpOrder = ["xformOp:scale"]
+}"#,
+    );
+    assert!(r
+        .links
+        .iter()
+        .find(|l| l.name == "/b")
+        .unwrap()
+        .shapes
+        .is_empty());
+    assert_eq!(lost_collisions(&r), 1);
+}
+
+#[test]
+fn an_orient_op_turns_the_translation_listed_after_it() {
+    let (s, _) = shape_pose(
+        r#"def Sphere "s" {
+    quatf xformOp:orient = (0.7071068, 0, 0, 0.7071068)
+    double3 xformOp:translate = (1, 0, 0)
+    uniform token[] xformOpOrder = ["xformOp:orient", "xformOp:translate"]
+}"#,
+    );
+    assert!(at(&s, [0.0, 1.0, 0.0]), "{:?}", s.origin);
+    assert!(
+        near(s.origin.rpy[2], std::f64::consts::FRAC_PI_2),
+        "{:?}",
+        s.origin
+    );
+}
+
+#[test]
+fn a_single_axis_rotation_turns_the_shape() {
+    let (s, _) = shape_pose(
+        r#"def Cube "c" {
+    float xformOp:rotateX = 90
+    uniform token[] xformOpOrder = ["xformOp:rotateX"]
+}"#,
+    );
+    assert!(
+        near(s.origin.rpy[0], std::f64::consts::FRAC_PI_2),
+        "{:?}",
+        s.origin
+    );
+}
+
+#[test]
+fn a_rotation_order_other_than_xyz_takes_each_angle_from_its_own_axis() {
+    let (s, _) = shape_pose(
+        r#"def Xform "g" {
+    float3 xformOp:rotateXZY = (90, 0, 90)
+    uniform token[] xformOpOrder = ["xformOp:rotateXZY"]
+    def Sphere "s" {
+        double3 xformOp:translate = (0, 0, 1)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+}"#,
+    );
+    assert!(at(&s, [1.0, 0.0, 0.0]), "{:?}", s.origin);
+}
+
+#[test]
+fn an_inverted_op_undoes_its_translation() {
+    let (s, _) = shape_pose(
+        r#"def Xform "g" {
+    double3 xformOp:translate = (0, 0, 1)
+    uniform token[] xformOpOrder = ["!invert!xformOp:translate"]
+    def Sphere "s" {}
+}"#,
+    );
+    assert!(at(&s, [0.0, 0.0, -1.0]), "{:?}", s.origin);
+}
+
+#[test]
+fn a_reset_stack_ignores_the_parents_above_it() {
+    let r = robot(
+        r#"#usda 1.0
+def Xform "b" (prepend apiSchemas = ["PhysicsRigidBodyAPI"])
+{
+    double3 xformOp:translate = (5, 0, 0)
+    uniform token[] xformOpOrder = ["xformOp:translate"]
+    def Xform "g" {
+        double3 xformOp:translate = (0, 0, 2)
+        uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:translate"]
+        def Sphere "s" {}
+    }
+}
+"#,
+    );
+    let s = only_shape(&r);
+    assert!(at(s, [-5.0, 0.0, 2.0]), "{:?}", s.origin);
+}
+
+#[test]
+fn a_transform_matrix_carries_its_translation_in_the_last_row() {
+    let (s, _) = shape_pose(
+        r#"def Sphere "s" {
+    matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (1, 2, 3, 1) )
+    uniform token[] xformOpOrder = ["xformOp:transform"]
+}"#,
+    );
+    assert!(at(&s, [1.0, 2.0, 3.0]), "{:?}", s.origin);
+}
+
+#[test]
+fn a_prim_the_model_cannot_place_is_not_a_shape() {
+    let unknown = shapes_of(
+        r#"def Sphere "s" (prepend apiSchemas = ["PhysicsCollisionAPI"]) {
+    double xformOp:wobble = 1
+    uniform token[] xformOpOrder = ["xformOp:wobble"]
+}"#,
+    );
+    assert_eq!(lost_collisions(&unknown), 1);
+    let not_a_matrix = shapes_of(
+        r#"def Sphere "s" (prepend apiSchemas = ["PhysicsCollisionAPI"]) {
+    double3 xformOp:transform = (1, 2, 3)
+    uniform token[] xformOpOrder = ["xformOp:transform"]
+}"#,
+    );
+    assert_eq!(lost_collisions(&not_a_matrix), 1);
+    let flat = shapes_of(
+        r#"def Cube "c" {
+    double3 xformOp:scale = (0, 1, 1)
+    uniform token[] xformOpOrder = ["xformOp:scale"]
+}"#,
+    );
+    assert!(flat
+        .links
+        .iter()
+        .find(|l| l.name == "/b")
+        .unwrap()
+        .shapes
+        .is_empty());
+    let loose = robot(
+        r#"#usda 1.0
+def Xform "b" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {}
+def Cube "floor" (prepend apiSchemas = ["PhysicsCollisionAPI"]) {}
+"#,
+    );
+    assert_eq!(lost_collisions(&loose), 1);
+}

@@ -1,8 +1,8 @@
 //! Maps the UsdPhysics data onto the format-neutral [`Robot`].
 
 use crate::model::{
-    Format, Geometry, Inertia, Inertial, Joint, JointKind, Limit, Link, Origin, ParseError, Robot,
-    Shape, Span,
+    Format, Inertia, Inertial, Joint, JointKind, Limit, Link, Origin, ParseError, Robot, Shape,
+    Span,
 };
 use crate::rotation::{from_quat, rpy};
 use crate::usd::Usd;
@@ -49,11 +49,8 @@ impl Usd {
             if let Some(link) = robot.links.iter_mut().find(|l| l.name == sh.body) {
                 link.shapes.push(Shape {
                     role: sh.role,
-                    geometry: scaled(&sh.geometry, m),
-                    origin: Origin {
-                        xyz: sh.origin.xyz.map(|v| v * m),
-                        rpy: sh.origin.rpy,
-                    },
+                    geometry: sh.geometry.clone(),
+                    origin: sh.origin,
                     span: Span::NONE,
                 });
             }
@@ -62,25 +59,6 @@ impl Usd {
             robot.joints.push(joint(j, m));
         }
         Ok(robot)
-    }
-}
-
-/// Primitive sizes from stage units to metres.
-fn scaled(g: &Geometry, m: f64) -> Geometry {
-    match g {
-        Geometry::Box { size } => Geometry::Box {
-            size: size.map(|v| v * m),
-        },
-        Geometry::Sphere { radius } => Geometry::Sphere { radius: radius * m },
-        Geometry::Cylinder { radius, length } => Geometry::Cylinder {
-            radius: radius * m,
-            length: length * m,
-        },
-        Geometry::Capsule { radius, length } => Geometry::Capsule {
-            radius: radius * m,
-            length: length * m,
-        },
-        mesh @ Geometry::Mesh { .. } => mesh.clone(),
     }
 }
 

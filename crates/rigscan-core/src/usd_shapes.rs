@@ -71,10 +71,11 @@ fn invert(m: &Mat) -> Option<Mat> {
 /// The shapes of every `Cube`, `Sphere`, `Cylinder` and `Capsule` under a body. A shape whose
 /// pose or size the model cannot hold, and a collision prim that is not a shape, are listed as lost.
 pub(crate) fn read(stage: &Stage, paths: &[String], usd: &mut Usd) {
-    for path in paths {
-        let Ok(prim) = stage.prim(path.as_str()) else {
-            continue;
-        };
+    let meters = usd.meters_per_unit;
+    let prims = paths
+        .iter()
+        .filter_map(|p| Some((p, stage.prim(p.as_str()).ok()?)));
+    for (path, prim) in prims {
         let ty = prim
             .type_name()
             .ok()
@@ -87,7 +88,8 @@ pub(crate) fn read(stage: &Stage, paths: &[String], usd: &mut Usd) {
         let collision = prim
             .api_schemas()
             .is_ok_and(|a| a.iter().any(|x| x.as_str() == "PhysicsCollisionAPI"));
-        let shape = body_of(usd, path).and_then(|body| shape(stage, &prim, &ty, &body, collision));
+        let shape =
+            body_of(usd, path).and_then(|body| shape(stage, &prim, &ty, &body, collision, meters));
         match shape {
             Some(s) => usd.shapes.push(s),
             None if collision => usd.unmapped.push(Unmapped {
@@ -114,12 +116,19 @@ fn body_of(usd: &Usd, path: &str) -> Option<String> {
     }
 }
 
-fn shape(stage: &Stage, prim: &Prim, ty: &str, body: &str, collision: bool) -> Option<UsdShape> {
+fn shape(
+    stage: &Stage,
+    prim: &Prim,
+    ty: &str,
+    body: &str,
+    collision: bool,
+    meters: f64,
+) -> Option<UsdShape> {
     let stage_body = stage.prim(body).ok()?;
     let relative = world(prim)?;
     let relative = world(&stage_body)?.inverse()?.after(&relative);
     let (scale, rotation) = decompose(&relative.lin)?;
-    let (geometry, turn) = geometry(prim, ty, scale)?;
+    let (geometry, turn) = geometry(prim, ty, scale.map(|s| s * meters))?;
     let hidden = is_hidden(prim);
     let role = match (collision, hidden) {
         (true, true) => Role::Collision,
@@ -132,7 +141,7 @@ fn shape(stage: &Stage, prim: &Prim, ty: &str, body: &str, collision: bool) -> O
         geometry,
         role,
         origin: Origin {
-            xyz: relative.t,
+            xyz: relative.t.map(|v| v * meters),
             rpy: rpy(&mul(&rotation, &turn)),
         },
     })
@@ -163,7 +172,7 @@ fn decompose(lin: &Mat) -> Option<([f64; 3], Mat)> {
     Some((scale, r))
 }
 
-/// The geometry in stage units, and the rotation from the shape's own axis onto the prim's Z.
+/// The geometry, with `scale` taking stage units to metres, and the rotation from the shape's own axis onto the prim's Z.
 fn geometry(prim: &Prim, ty: &str, scale: [f64; 3]) -> Option<(Geometry, Mat)> {
     let get = |name: &str, default: f64| match prim.attribute(name).get::<Value>() {
         Ok(Some(v)) => number(v),
@@ -302,10 +311,11 @@ fn operation(kind: &str, value: &Value) -> Option<Affine> {
         k if k.starts_with("rotate") && k.len() == 9 => {
             let angles = vec3(value.clone())?;
             let order = &k.as_bytes()[6..];
-            // rotateXYZ turns about X first, so the matrix is Rz * Ry * Rx.
+            // rotateXZY turns about X first, then Z, then Y; the angles are still given as x, y, z.
             let mut lin = IDENTITY;
-            for (axis, angle) in order.iter().zip(angles) {
-                lin = mul(&about((axis - b'X') as usize, angle.to_radians()), &lin);
+            for axis in order {
+                let index = (axis - b'X') as usize;
+                lin = mul(&about(index, angles[index].to_radians()), &lin);
             }
             Some(linear(lin))
         }

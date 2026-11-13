@@ -219,5 +219,13 @@ pub enum Element {
     Joint(usize),
 }
 
+/// A robot written in another format, and what the target format could not hold.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Converted {
+    pub text: String,
+    /// Everything the reader or the writer dropped, in the order found.
+    pub lost: Vec<Unmapped>,
+}
+
 #[derive(Debug)]
 pub struct ParseError(pub String);

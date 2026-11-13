@@ -580,6 +580,34 @@ fn a_cylinder_fromto_is_turned_from_z_onto_the_segment() {
 }
 
 #[test]
+fn a_later_joint_at_another_pos_is_reported_as_lost() {
+    let r = robot(
+        r#"<mujoco><worldbody>
+  <body name="a"><joint name="j" pos="0 0 1"/><joint name="k" pos="0 0 2"/><joint name="m" pos="0 0 1"/></body>
+</worldbody></mujoco>"#,
+    );
+    let lost: Vec<_> = r
+        .unmapped
+        .iter()
+        .map(|u| (u.what.as_str(), u.name.as_deref()))
+        .collect();
+    assert_eq!(lost, [("joint/pos", Some("k"))]);
+}
+
+#[test]
+fn a_fromto_with_no_length_is_an_error() {
+    let err = parse_mjcf(
+        "<mujoco><worldbody><body name=\"a\">\
+         <geom type=\"capsule\" size=\"0.1\" fromto=\"1 1 1 1 1 1\"/>\
+         </body></worldbody></mujoco>",
+        &NoFiles,
+    )
+    .and_then(|m| m.to_robot())
+    .unwrap_err();
+    assert!(err.0.contains("`fromto` has no direction"), "{}", err.0);
+}
+
+#[test]
 fn geom_pos_is_the_shape_origin_and_default_class_values_apply() {
     let r = robot(
         "<mujoco><default><geom size=\"2\" pos=\"1 2 3\"/></default><worldbody><body name=\"a\"><geom/></body></worldbody></mujoco>",

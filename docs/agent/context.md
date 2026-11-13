@@ -65,7 +65,9 @@ UsdPhysics only), SDF, mesh conversion, simulation.
 - CLI: `rigscan scan <files>` (#2): `path:line:col: severity RULE: message`, exit 0/1/2. No report layer yet (#3).
 - MJCF: `parse_mjcf` gives a resolved element tree (#10) and `Mjcf::to_robot` maps it onto `Robot` (#11). `rigscan scan` reads MJCF (#60) and runs `lint_mjcf`: the shared rules plus RS016-RS018.
 - USD: `parse_usd` composes a stage and `Usd::to_robot` maps UsdPhysics onto `Robot` (#15); `rigscan scan` reads `.usda`, `.usdc` and `.usd`; runs `lint_usd`: the shared rules plus RS019-RS022.
-- Not done: conversion, bindings, playground.
+- Conversion: `write_urdf(&Robot) -> Converted { text, lost }` writes the neutral model as URDF (#19). It takes the model, not the source text, so any reader's robot can be written. `lost` is the reader's `unmapped` plus what URDF cannot hold (a capsule shape, a joint type URDF does not define). A shape for both roles is written as a `visual` and a `collision`. Numbers use Rust's shortest round-trip form, so a robot read from the text equals the one written.
+- Every conversion has a round-trip test: A to B and back to A must give the same model (spans, the loss list and the `Both` role split aside), and the text written for it must be a fixed point (`write(parse(write(r))) == write(r)`). The URDF writer is checked from URDF (the 69 corpus robots and the example) and from MJCF; the cross-format A to B to A check arrives with the MJCF writer.
+- Not done: bindings, playground, the `convert` command, the MJCF writer.
 - A self-closing `<joint .../>` or a joint missing `<parent>`/`<child>` is kept
   with empty endpoints and reported by RS001 ("has no parent link").
 

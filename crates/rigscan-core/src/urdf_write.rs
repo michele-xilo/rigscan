@@ -38,17 +38,13 @@ fn lose(lost: &mut Vec<Unmapped>, what: &str, name: &str) {
 fn write_link(out: &mut String, link: &Link, lost: &mut Vec<Unmapped>) {
     out.push_str("  <link");
     attr(out, "name", &link.name);
-    let shapes: Vec<&Shape> = link
-        .shapes
-        .iter()
-        .filter(|s| match s.geometry {
-            Geometry::Capsule { .. } => {
-                lose(lost, "capsule", &link.name);
-                false
-            }
-            _ => true,
-        })
-        .collect();
+    let mut shapes = Vec::with_capacity(link.shapes.len());
+    for s in &link.shapes {
+        match geometry(&s.geometry) {
+            Some(g) => shapes.push((s, g)),
+            None => lose(lost, "capsule", &link.name),
+        }
+    }
     if link.inertial.is_none() && shapes.is_empty() {
         out.push_str("/>\n");
         return;
@@ -57,13 +53,13 @@ fn write_link(out: &mut String, link: &Link, lost: &mut Vec<Unmapped>) {
     if let Some(i) = &link.inertial {
         write_inertial(out, i);
     }
-    for s in shapes {
+    for (s, g) in shapes {
         match s.role {
-            Role::Visual => write_shape(out, "visual", s),
-            Role::Collision => write_shape(out, "collision", s),
+            Role::Visual => write_shape(out, "visual", s, &g),
+            Role::Collision => write_shape(out, "collision", s, &g),
             Role::Both => {
-                write_shape(out, "visual", s);
-                write_shape(out, "collision", s);
+                write_shape(out, "visual", s, &g);
+                write_shape(out, "collision", s, &g);
             }
         }
     }
@@ -95,35 +91,43 @@ fn write_inertial(out: &mut String, i: &Inertial) {
     out.push_str("    </inertial>\n");
 }
 
-fn write_shape(out: &mut String, tag: &str, s: &Shape) {
-    let _ = writeln!(out, "    <{tag}>");
-    origin(out, "      ", &s.origin);
-    out.push_str("      <geometry>\n        ");
-    match &s.geometry {
+/// The `<geometry>` child, or `None` for a shape URDF cannot hold.
+fn geometry(g: &Geometry) -> Option<String> {
+    let mut out = String::new();
+    match g {
         Geometry::Box { size } => {
             out.push_str("<box");
-            vector(out, "size", *size);
+            vector(&mut out, "size", *size);
         }
         Geometry::Sphere { radius } => {
             out.push_str("<sphere");
-            number(out, "radius", *radius);
+            number(&mut out, "radius", *radius);
         }
         Geometry::Cylinder { radius, length } => {
             out.push_str("<cylinder");
-            number(out, "radius", *radius);
-            number(out, "length", *length);
+            number(&mut out, "radius", *radius);
+            number(&mut out, "length", *length);
         }
         Geometry::Mesh { filename, scale } => {
             out.push_str("<mesh");
-            attr(out, "filename", filename);
+            attr(&mut out, "filename", filename);
             if *scale != [1.0; 3] {
-                vector(out, "scale", *scale);
+                vector(&mut out, "scale", *scale);
             }
         }
-        // Capsules are filtered out before a shape is written.
-        Geometry::Capsule { .. } => {}
+        Geometry::Capsule { .. } => return None,
     }
-    out.push_str("/>\n      </geometry>\n");
+    out.push_str("/>");
+    Some(out)
+}
+
+fn write_shape(out: &mut String, tag: &str, s: &Shape, geometry: &str) {
+    let _ = writeln!(out, "    <{tag}>");
+    origin(out, "      ", &s.origin);
+    let _ = writeln!(
+        out,
+        "      <geometry>\n        {geometry}\n      </geometry>"
+    );
     let _ = writeln!(out, "    </{tag}>");
 }
 

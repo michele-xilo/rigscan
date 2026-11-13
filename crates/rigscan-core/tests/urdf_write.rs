@@ -174,6 +174,34 @@ fn what_the_source_dropped_is_passed_on_and_what_urdf_cannot_hold_is_added() {
 }
 
 #[test]
+fn every_joint_type_and_primitive_shape_round_trips() {
+    let robot = parse_urdf(
+        r#"<robot name="r">
+  <link name="a"><collision><geometry><cylinder radius="0.1" length="2"/></geometry></collision></link>
+  <link name="b"/><link name="c"/><link name="d"/><link name="e"/>
+  <joint name="j1" type="continuous"><parent link="a"/><child link="b"/></joint>
+  <joint name="j2" type="fixed"><parent link="b"/><child link="c"/></joint>
+  <joint name="j3" type="floating"><parent link="c"/><child link="d"/></joint>
+  <joint name="j4" type="planar"><parent link="d"/><child link="e"/></joint>
+</robot>"#,
+    )
+    .unwrap();
+    assert_round_trip("kinds", robot);
+}
+
+#[test]
+fn an_inertial_with_only_a_mass_or_only_an_inertia_round_trips() {
+    let robot = parse_urdf(
+        r#"<robot name="r">
+  <link name="a"><inertial><mass value="1"/></inertial></link>
+  <link name="b"><inertial><inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/></inertial></link>
+</robot>"#,
+    )
+    .unwrap();
+    assert_round_trip("partial inertials", robot);
+}
+
+#[test]
 fn names_and_paths_with_markup_are_escaped() {
     let mut robot = parse_urdf("<robot name=\"a&amp;b\"><link name=\"x\"/></robot>").unwrap();
     robot.links[0].shapes.push(Shape {

@@ -25,3 +25,17 @@ jobs:
       - run: cargo build -p rigscan-wasm --target wasm32-unknown-unknown --profile wasm
       - run: cargo bench --workspace --no-run
       - run: python3 scripts/compare/compare.py --check
+
+  mujoco:
+    runs-on: ubuntu-latest
+    # Fails on real writer bugs until they are fixed; not yet a required check.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: pip install mujoco
+      - run: scripts/fetch-corpus.sh
+      - run: scripts/fetch-mjcf-corpus.sh
+      - run: cargo build -p rigscan-cli
+      - run: python3 scripts/verify/mujoco_load.py --require

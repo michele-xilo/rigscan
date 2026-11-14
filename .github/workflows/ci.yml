@@ -28,6 +28,8 @@ jobs:
 
   mujoco:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     # Fails on real writer bugs until they are fixed; not yet a required check.
     continue-on-error: true
     steps:

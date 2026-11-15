@@ -47,9 +47,12 @@ fn essence(mut r: Robot, lost: &[Unmapped], had_world: bool) -> Robot {
     let dynamics = reported(lost, "dynamics");
     let no_tensor = reported(lost, "inertial");
     let reframed = reported(lost, "inertial/frame");
+    // A second joint to one child is not written, so it is not in what comes back.
+    let extra = reported(lost, "joint/multiple");
+    r.joints.retain(|j| !extra.contains(&j.name));
     let kinds: HashSet<String> = lost
         .iter()
-        .filter(|u| u.what.starts_with("joint/"))
+        .filter(|u| u.what.starts_with("joint/") && u.what != "joint/multiple")
         .filter_map(|u| u.name.clone())
         .collect();
     r.format = Format::Mjcf;

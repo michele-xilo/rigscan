@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<robot name="arm">
+  <link name="base">
+    <inertial>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <mass value="2"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.03"/>
+    </inertial>
+  </link>
+  <link name="shoulder">
+    <inertial>
+      <origin xyz="0 0 0.1" rpy="0 0 0"/>
+      <mass value="1.5"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.005"/>
+    </inertial>
+  </link>
+  <link name="forearm">
+    <inertial>
+      <origin xyz="0.1 0 0" rpy="0 0 0"/>
+      <mass value="0.5"/>
+      <inertia ixx="0.02" ixy="0.001" ixz="0" iyy="0.02" iyz="0" izz="0.03"/>
+    </inertial>
+  </link>
+  <link name="slider">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.25"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+    </inertial>
+  </link>
+  <joint name="mount" type="fixed">
+    <parent link="base"/>
+    <child link="shoulder"/>
+    <origin xyz="0 0 0.2" rpy="0 0 0"/>
+  </joint>
+  <joint name="pan" type="continuous">
+    <parent link="shoulder"/>
+    <child link="forearm"/>
+    <origin xyz="0.3 0 0" rpy="0 0 1.5707963"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <joint name="reach" type="prismatic">
+    <parent link="forearm"/>
+    <child link="slider"/>
+    <origin xyz="0.2 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="0" upper="0.1" effort="10" velocity="1"/>
+  </joint>
+</robot>

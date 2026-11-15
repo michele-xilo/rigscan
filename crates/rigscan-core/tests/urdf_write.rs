@@ -1,7 +1,8 @@
 use rigscan_core::{
     parse_mjcf, parse_urdf, write_urdf, Format, Geometry, Joint, JointKind, Link, Origin, Robot,
-    Role, Shape, Span,
+    Role, Shape, Span, Unmapped,
 };
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 struct NoFiles;
@@ -15,7 +16,37 @@ impl rigscan_core::IncludeLoader for NoFiles {
 /// The model without what a text round trip cannot keep: positions, the list of losses and the
 /// source format. A
 /// shape for both roles is the one pair URDF has to write as two elements, so it is split.
-fn essence(mut r: Robot) -> Robot {
+///
+/// What the writer reported as lost is removed the way it was: an inertial without a mass and a
+/// tensor is left out, a second joint to one child is not written, and a joint type URDF does not
+/// define becomes a fixed joint.
+fn essence(mut r: Robot, lost: &[Unmapped]) -> Robot {
+    let named = |what: &str| -> HashSet<String> {
+        lost.iter()
+            .filter(|u| u.what == what)
+            .filter_map(|u| u.name.clone())
+            .collect()
+    };
+    let (no_inertial, extra) = (named("inertial"), named("joint/multiple"));
+    let other: HashSet<String> = lost
+        .iter()
+        .filter(|u| u.what.starts_with("joint/") && u.what != "joint/multiple")
+        .filter_map(|u| u.name.clone())
+        .collect();
+    r.joints.retain(|j| !extra.contains(&j.name));
+    for l in &mut r.links {
+        if no_inertial.contains(&l.name) {
+            l.inertial = None;
+        }
+    }
+    for j in &mut r.joints {
+        if other.contains(&j.name) {
+            j.kind = JointKind::Fixed;
+            j.axis = None;
+            j.limit = None;
+            j.dynamics = None;
+        }
+    }
     r.format = Format::Urdf;
     r.span = Span::NONE;
     r.unmapped.clear();
@@ -49,9 +80,14 @@ fn essence(mut r: Robot) -> Robot {
 
 /// The model read back from the URDF written for `robot` must be the same robot.
 fn assert_round_trip(label: &str, robot: Robot) {
-    let written = write_urdf(&robot).text;
+    let out = write_urdf(&robot);
+    let written = out.text;
     let back = parse_urdf(&written).unwrap_or_else(|e| panic!("{label}: {}\n{written}", e.0));
-    assert_eq!(essence(robot), essence(back), "{label}");
+    assert_eq!(
+        essence(robot, &out.lost),
+        essence(back, &out.lost),
+        "{label}"
+    );
 }
 
 const PINNED: &str = r#"<?xml version="1.0"?>
@@ -190,15 +226,71 @@ fn every_joint_type_and_primitive_shape_round_trips() {
 }
 
 #[test]
-fn an_inertial_with_only_a_mass_or_only_an_inertia_round_trips() {
+fn an_inertial_without_a_mass_and_a_tensor_is_left_out_and_reported() {
     let robot = parse_urdf(
         r#"<robot name="r">
   <link name="a"><inertial><mass value="1"/></inertial></link>
   <link name="b"><inertial><inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/></inertial></link>
+  <link name="c"><inertial><mass value="1"/><inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/></inertial></link>
 </robot>"#,
     )
     .unwrap();
+    let out = write_urdf(&robot);
+
+    assert_eq!(out.text.matches("<inertial>").count(), 1, "{}", out.text);
+    let mut lost: Vec<_> = out
+        .lost
+        .iter()
+        .map(|u| (u.what.as_str(), u.name.as_deref().unwrap()))
+        .collect();
+    lost.sort();
+    assert_eq!(lost, [("inertial", "a"), ("inertial", "b")]);
     assert_round_trip("partial inertials", robot);
+}
+
+#[test]
+fn a_joint_type_urdf_does_not_define_is_written_as_fixed() {
+    let robot = parse_mjcf(
+        r#"<mujoco><worldbody><body name="a"><joint name="b" type="ball"/></body></worldbody></mujoco>"#,
+        &NoFiles,
+    )
+    .unwrap()
+    .to_robot()
+    .unwrap();
+    let out = write_urdf(&robot);
+
+    assert!(!out.text.contains("type=\"ball\""), "{}", out.text);
+    assert!(
+        out.lost.iter().any(|u| u.what == "joint/ball"),
+        "{:?}",
+        out.lost
+    );
+    assert_round_trip("ball", robot);
+}
+
+#[test]
+fn a_second_joint_to_one_child_is_not_written_and_is_reported() {
+    let robot = parse_mjcf(
+        r#"<mujoco><worldbody><body name="a">
+  <joint name="x" type="hinge" axis="1 0 0"/><joint name="y" type="hinge" axis="0 1 0"/>
+</body></worldbody></mujoco>"#,
+        &NoFiles,
+    )
+    .unwrap()
+    .to_robot()
+    .unwrap();
+    let out = write_urdf(&robot);
+
+    assert_eq!(out.text.matches("<joint").count(), 1, "{}", out.text);
+    assert!(out.text.contains("name=\"x\""));
+    assert!(
+        out.lost
+            .iter()
+            .any(|u| u.what == "joint/multiple" && u.name.as_deref() == Some("y")),
+        "{:?}",
+        out.lost
+    );
+    assert_round_trip("multiple", robot);
 }
 
 #[test]

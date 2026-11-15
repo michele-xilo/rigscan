@@ -4,6 +4,7 @@ use crate::model::{
     Converted, Geometry, Inertial, Joint, JointKind, Link, Origin, Robot, Role, Shape, Span,
     Unmapped,
 };
+use std::collections::HashSet;
 use std::fmt::Write;
 
 /// The robot as URDF text, with what URDF cannot hold listed in `lost`.
@@ -20,8 +21,14 @@ pub fn write_urdf(robot: &Robot) -> Converted {
     for link in &robot.links {
         write_link(&mut out, link, &mut lost);
     }
+    // MuJoCo and most URDF readers need one parent per link; the first joint to a child is kept.
+    let mut children = HashSet::with_capacity(robot.joints.len());
     for joint in &robot.joints {
-        write_joint(&mut out, joint, &mut lost);
+        if children.insert(joint.child.as_str()) {
+            write_joint(&mut out, joint, &mut lost);
+        } else {
+            lose(&mut lost, "joint/multiple", &joint.name);
+        }
     }
     out.push_str("</robot>\n");
     Converted { text: out, lost }
@@ -51,7 +58,12 @@ fn write_link(out: &mut String, link: &Link, lost: &mut Vec<Unmapped>) {
     }
     out.push_str(">\n");
     if let Some(i) = &link.inertial {
-        write_inertial(out, i);
+        // URDF needs both a mass and a tensor on an inertial; neither is made up.
+        if i.mass.is_some() && i.inertia.is_some() {
+            write_inertial(out, i);
+        } else {
+            lose(lost, "inertial", &link.name);
+        }
     }
     for (s, g) in shapes {
         match s.role {
@@ -141,7 +153,7 @@ fn write_joint(out: &mut String, j: &Joint, lost: &mut Vec<Unmapped>) {
         JointKind::Planar => "planar",
         JointKind::Other(t) => {
             lose(lost, &format!("joint/{t}"), &j.name);
-            t
+            "fixed"
         }
     };
     out.push_str("  <joint");

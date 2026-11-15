@@ -4,6 +4,7 @@ use crate::model::{
     Converted, Geometry, Inertial, Joint, JointKind, Link, Origin, Robot, Role, Shape, Span,
     Unmapped,
 };
+use crate::rotation::{from_rpy, mul};
 use crate::urdf_write::{attr, optional, vector};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
@@ -174,7 +175,7 @@ impl<'a> Writer<'a> {
         }
         self.out.push_str(">\n");
         if let Some(i) = &link.inertial {
-            inertial(&mut self.out, &pad, i);
+            self.inertial(&link.name, &pad, i);
         }
         let top = joints.first().is_some_and(|j| j.parent == "world");
         for j in joints {
@@ -267,6 +268,55 @@ impl<'a> Writer<'a> {
         self.out.push_str("/>\n");
     }
 
+    /// MuJoCo needs a mass and a tensor on `<inertial>`, and takes a full tensor only in the body
+    /// frame, so a rotated frame is folded into the tensor.
+    fn inertial(&mut self, link: &str, pad: &str, i: &Inertial) {
+        let (Some(mass), Some(t)) = (i.mass, &i.inertia) else {
+            self.lose("inertial", link);
+            return;
+        };
+        let diagonal = t.ixy == 0.0 && t.ixz == 0.0 && t.iyz == 0.0;
+        let rotated = i.origin.rpy != [0.0; 3];
+        let _ = write!(self.out, "{pad}  <inertial");
+        vector(&mut self.out, "pos", i.origin.xyz);
+        if rotated && diagonal {
+            vector(&mut self.out, "euler", i.origin.rpy);
+        }
+        optional(&mut self.out, "mass", Some(mass));
+        if diagonal {
+            vector(&mut self.out, "diaginertia", [t.ixx, t.iyy, t.izz]);
+        } else {
+            let m = if rotated {
+                self.lose("inertial/frame", link);
+                let r = from_rpy(i.origin.rpy);
+                let rt = [0, 1, 2].map(|a| [0, 1, 2].map(|b| r[b][a]));
+                let tensor = [
+                    [t.ixx, t.ixy, t.ixz],
+                    [t.ixy, t.iyy, t.iyz],
+                    [t.ixz, t.iyz, t.izz],
+                ];
+                mul(&r, &mul(&tensor, &rt))
+            } else {
+                [
+                    [t.ixx, t.ixy, t.ixz],
+                    [t.ixy, t.iyy, t.iyz],
+                    [t.ixz, t.iyz, t.izz],
+                ]
+            };
+            let _ = write!(
+                self.out,
+                " fullinertia=\"{} {} {} {} {} {}\"",
+                m[0][0] + 0.0,
+                m[1][1] + 0.0,
+                m[2][2] + 0.0,
+                m[0][1] + 0.0,
+                m[0][2] + 0.0,
+                m[1][2] + 0.0
+            );
+        }
+        self.out.push_str("/>\n");
+    }
+
     fn geoms(&mut self, link: &Link, depth: usize) {
         let pad = "  ".repeat(depth);
         for s in &link.shapes {
@@ -328,22 +378,4 @@ fn pose(out: &mut String, o: &Origin) {
     if o.rpy != [0.0; 3] {
         vector(out, "euler", o.rpy);
     }
-}
-
-fn inertial(out: &mut String, pad: &str, i: &Inertial) {
-    let _ = write!(out, "{pad}  <inertial");
-    pose(out, &i.origin);
-    optional(out, "mass", i.mass);
-    if let Some(t) = &i.inertia {
-        if t.ixy == 0.0 && t.ixz == 0.0 && t.iyz == 0.0 {
-            vector(out, "diaginertia", [t.ixx, t.iyy, t.izz]);
-        } else {
-            let _ = write!(
-                out,
-                " fullinertia=\"{} {} {} {} {} {}\"",
-                t.ixx, t.iyy, t.izz, t.ixy, t.ixz, t.iyz
-            );
-        }
-    }
-    out.push_str("/>\n");
 }

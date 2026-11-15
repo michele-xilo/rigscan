@@ -47,6 +47,11 @@ fn rotation(axis: [f64; 3], angle: f64) -> Mat {
 }
 
 /// Rotation about the coordinate axis `index` (0 x, 1 y, 2 z).
+/// The rotation of a URDF `rpy`: roll about X, then pitch about Y, then yaw about Z, all fixed.
+pub(crate) fn from_rpy(r: [f64; 3]) -> Mat {
+    mul(&about(2, r[2]), &mul(&about(1, r[1]), &about(0, r[0])))
+}
+
 pub(crate) fn about(index: usize, angle: f64) -> Mat {
     let mut axis = [0.0; 3];
     axis[index] = 1.0;

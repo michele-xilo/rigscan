@@ -4,6 +4,7 @@ use rigscan_core::{
 };
 use std::cell::RefCell;
 use std::collections::HashSet;
+use std::f64::consts::FRAC_PI_2;
 use std::path::{Path, PathBuf};
 
 struct NoFiles;
@@ -44,6 +45,8 @@ fn essence(mut r: Robot, lost: &[Unmapped], had_world: bool) -> Robot {
     );
     let capsule = reported(lost, "capsule");
     let dynamics = reported(lost, "dynamics");
+    let no_tensor = reported(lost, "inertial");
+    let reframed = reported(lost, "inertial/frame");
     let kinds: HashSet<String> = lost
         .iter()
         .filter(|u| u.what.starts_with("joint/"))
@@ -56,6 +59,14 @@ fn essence(mut r: Robot, lost: &[Unmapped], had_world: bool) -> Robot {
         l.span = Span::NONE;
         if let Some(i) = &mut l.inertial {
             i.span = Span::NONE;
+            if reframed.contains(&l.name) {
+                // The tensor was rewritten in the link frame: the same physics, other numbers.
+                i.inertia = None;
+                i.origin.rpy = [0.0; 3];
+            }
+        }
+        if no_tensor.contains(&l.name) {
+            l.inertial = None;
         }
         let mut shapes = Vec::new();
         for mut s in l.shapes.drain(..) {
@@ -318,13 +329,82 @@ fn a_joint_mjcf_cannot_hold_becomes_a_weld_and_is_reported() {
     assert!(out.lost.iter().any(|u| u.what == "joint/planar"));
 }
 
+fn inertial_urdf(origin_rpy: &str, tensor: &str) -> Robot {
+    parse_urdf(&format!(
+        r#"<robot name="r"><link name="a"><inertial>
+  <origin xyz="0 0 0" rpy="{origin_rpy}"/><mass value="1"/><inertia {tensor}/>
+</inertial></link></robot>"#
+    ))
+    .unwrap()
+}
+
+const FULL: &str = r#"ixx="1" iyy="2" izz="3" ixy="0.5" ixz="0" iyz="0""#;
+const DIAGONAL: &str = r#"ixx="1" iyy="2" izz="3" ixy="0" ixz="0" iyz="0""#;
+
 #[test]
-fn an_inertial_with_only_a_mass_round_trips() {
+fn an_inertial_always_has_a_position() {
+    let out = write_mjcf(&inertial_urdf("0 0 0", FULL));
+
+    assert!(out.text.contains("<inertial pos=\"0 0 0\""), "{}", out.text);
+}
+
+#[test]
+fn a_full_tensor_in_a_rotated_frame_is_written_in_the_link_frame_and_reported() {
+    let out = write_mjcf(&inertial_urdf(&format!("0 0 {}", FRAC_PI_2), FULL));
+
+    assert!(!out.text.contains("euler=\""), "{}", out.text);
+    assert_eq!(
+        out.lost
+            .iter()
+            .map(|u| (u.what.as_str(), u.name.as_deref()))
+            .collect::<Vec<_>>(),
+        [("inertial/frame", Some("a"))]
+    );
+    // A quarter turn about z swaps x and y: ixx and iyy trade places and ixy changes sign.
+    let back = from_mjcf(&out.text);
+    let link = back.links.iter().find(|l| l.name == "a").unwrap();
+    let t = link.inertial.clone().unwrap().inertia.unwrap();
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
+    assert!(
+        near(t.ixx, 2.0) && near(t.iyy, 1.0) && near(t.izz, 3.0),
+        "{t:?}"
+    );
+    assert!(
+        near(t.ixy, -0.5) && near(t.ixz, 0.0) && near(t.iyz, 0.0),
+        "{t:?}"
+    );
+}
+
+#[test]
+fn a_diagonal_tensor_in_a_rotated_frame_keeps_its_frame() {
+    let out = write_mjcf(&inertial_urdf("0 0 0.5", DIAGONAL));
+
+    assert!(out.text.contains("euler=\"0 0 0.5\""), "{}", out.text);
+    assert!(out.lost.is_empty(), "{:?}", out.lost);
+}
+
+#[test]
+fn an_inertial_without_a_tensor_is_left_out_and_reported() {
     let a = parse_urdf(
         "<robot name=\"r\"><link name=\"a\"><inertial><mass value=\"1\"/></inertial></link></robot>",
     )
     .unwrap();
+    let out = write_mjcf(&a);
+
+    assert!(!out.text.contains("<inertial"), "{}", out.text);
+    assert!(
+        out.lost
+            .iter()
+            .any(|u| u.what == "inertial" && u.name.as_deref() == Some("a")),
+        "{:?}",
+        out.lost
+    );
     assert_urdf_round_trip("mass only", &a);
+}
+
+#[test]
+fn a_rotated_full_tensor_round_trips() {
+    assert_urdf_round_trip("rotated", &inertial_urdf("0.1 0.2 0.3", FULL));
 }
 
 fn lost_of(urdf: &str) -> Vec<(String, String)> {

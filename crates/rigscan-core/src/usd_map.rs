@@ -4,7 +4,7 @@ use crate::model::{
     Format, Inertia, Inertial, Joint, JointKind, Limit, Link, Origin, ParseError, Robot, Shape,
     Span,
 };
-use crate::rotation::{from_quat, rpy};
+use crate::rotation::{apply, from_quat, mul, rpy, transpose, Mat};
 use crate::usd::Usd;
 
 /// The link a joint with no `body0` or `body1` is attached to.
@@ -29,14 +29,7 @@ impl Usd {
         for b in &self.bodies {
             let inertial = (b.mass.is_some() || b.inertia.is_some()).then(|| Inertial {
                 mass: b.mass.map(|v| v * kg),
-                inertia: b.inertia.map(|d| Inertia {
-                    ixx: d[0] * kg * m * m,
-                    iyy: d[1] * kg * m * m,
-                    izz: d[2] * kg * m * m,
-                    ixy: 0.0,
-                    ixz: 0.0,
-                    iyz: 0.0,
-                }),
+                inertia: b.inertia.map(|d| tensor(d, b.principal_axes, kg * m * m)),
                 origin: Origin {
                     xyz: b.center_of_mass.unwrap_or([0.0; 3]).map(|v| v * m),
                     ..Origin::default()
@@ -56,7 +49,7 @@ impl Usd {
             }
         }
         for j in &self.joints {
-            robot.joints.push(joint(j, m));
+            robot.joints.push(joint(j, m, kg));
         }
         Ok(robot)
     }
@@ -71,7 +64,7 @@ fn link(name: &str, inertial: Option<Inertial>) -> Link {
     }
 }
 
-fn joint(j: &crate::usd::UsdJoint, meters: f64) -> Joint {
+fn joint(j: &crate::usd::UsdJoint, meters: f64, kilograms: f64) -> Joint {
     let revolute = j.type_name == "PhysicsRevoluteJoint";
     let limited = j.lower.is_some() || j.upper.is_some();
     // USD authors revolute limits in degrees and prismatic ones in stage units.
@@ -87,26 +80,48 @@ fn joint(j: &crate::usd::UsdJoint, meters: f64) -> Joint {
         "PhysicsFixedJoint" => JointKind::Fixed,
         other => JointKind::Other(other_name(other)),
     };
-    let axis = matches!(
+    let moves = matches!(
         kind,
         JointKind::Revolute | JointKind::Continuous | JointKind::Prismatic
-    )
-    .then_some(j.axis);
-    let limit =
-        (limited && matches!(kind, JointKind::Revolute | JointKind::Prismatic)).then(|| Limit {
-            lower: j.lower.map(|v| v * scale),
-            upper: j.upper.map(|v| v * scale),
-            effort: None,
-            velocity: None,
-        });
+    );
+    // With no `body1` the second frame is in the world, and the body is held to it: the world is
+    // the parent and `body0` the child, so each frame goes to the other side.
+    let flip = j.body1.is_none() && j.body0.is_some();
+    let (parent_side, child_side) = if flip {
+        ((j.local_pos1, j.local_rot1), (j.local_pos0, j.local_rot0))
+    } else {
+        ((j.local_pos0, j.local_rot0), (j.local_pos1, j.local_rot1))
+    };
+    // The axis token is in the joint frame, which is the child's frame in the child body.
+    let r_child = from_quat(child_side.1).unwrap_or(IDENTITY);
+    let axis = moves.then(|| apply(&r_child, j.axis));
+    // A drive's torque or force carries the same unit as the joint's effort.
+    let effort = j
+        .max_force
+        .map(|f| f * kilograms * meters * if revolute { meters } else { 1.0 });
+    let limit = (moves && (limited || effort.is_some())).then(|| Limit {
+        lower: j.lower.map(|v| v * scale),
+        upper: j.upper.map(|v| v * scale),
+        effort,
+        velocity: None,
+    });
+    // The child frame sits where the parent's frame is, offset back by its own: T_p * T_c^-1.
+    let r_parent = from_quat(parent_side.1).unwrap_or(IDENTITY);
+    let turn = mul(&r_parent, &transpose(&r_child));
+    let back = apply(&turn, child_side.0);
     Joint {
         name: j.path.clone(),
-        parent: j.body0.clone().unwrap_or_else(|| WORLD.into()),
-        child: j.body1.clone().unwrap_or_else(|| WORLD.into()),
+        parent: if flip { None } else { j.body0.clone() }.unwrap_or_else(|| WORLD.into()),
+        child: if flip {
+            j.body0.clone()
+        } else {
+            j.body1.clone()
+        }
+        .unwrap_or_else(|| WORLD.into()),
         kind,
         origin: Origin {
-            xyz: j.local_pos0.map(|v| v * meters),
-            rpy: joint_rpy(j.local_rot0),
+            xyz: std::array::from_fn(|i| (parent_side.0[i] - back[i]) * meters),
+            rpy: joint_rpy(&turn),
         },
         limit,
         mimic: None,
@@ -117,11 +132,27 @@ fn joint(j: &crate::usd::UsdJoint, meters: f64) -> Joint {
 }
 
 /// Most joints carry no rotation, so identity skips the trigonometry.
-fn joint_rpy(q: [f64; 4]) -> [f64; 3] {
-    if q == [1.0, 0.0, 0.0, 0.0] {
+fn joint_rpy(r: &Mat) -> [f64; 3] {
+    if *r == IDENTITY {
         return [0.0; 3];
     }
-    from_quat(q).map_or([0.0; 3], |m| rpy(&m))
+    rpy(r)
+}
+
+const IDENTITY: Mat = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+
+/// The full tensor in the body frame of a tensor that is diagonal in the principal frame.
+fn tensor(d: [f64; 3], axes: [f64; 4], scale: f64) -> Inertia {
+    let r = from_quat(axes).unwrap_or(IDENTITY);
+    let at = |i: usize, j: usize| (0..3).map(|k| r[i][k] * d[k] * r[j][k]).sum::<f64>() * scale;
+    Inertia {
+        ixx: at(0, 0),
+        iyy: at(1, 1),
+        izz: at(2, 2),
+        ixy: at(0, 1),
+        ixz: at(0, 2),
+        iyz: at(1, 2),
+    }
 }
 
 /// `PhysicsSphericalJoint` to `spherical`; the generic `PhysicsJoint` to `joint`.

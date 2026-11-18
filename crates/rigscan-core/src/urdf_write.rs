@@ -174,8 +174,19 @@ fn write_joint(out: &mut String, j: &Joint, lost: &mut Vec<Unmapped>) {
         out.push_str("    <limit");
         optional(out, "lower", l.lower);
         optional(out, "upper", l.upper);
-        optional(out, "effort", l.effort);
-        optional(out, "velocity", l.velocity);
+        // URDF requires both on a revolute or prismatic limit, and MJCF holds neither. A limit
+        // with no bound is left alone: written with zeros it would read as a joint locked at 0.
+        let needed = matches!(j.kind, JointKind::Revolute | JointKind::Prismatic)
+            && (l.lower.is_some() || l.upper.is_some());
+        for (key, value) in [("effort", l.effort), ("velocity", l.velocity)] {
+            match value {
+                None if needed => {
+                    number(out, key, 0.0);
+                    lose(lost, &format!("limit/{key}/default"), &j.name);
+                }
+                _ => optional(out, key, value),
+            }
+        }
         out.push_str("/>\n");
     }
     if let Some(d) = &j.dynamics {

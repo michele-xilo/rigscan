@@ -18,8 +18,8 @@ impl rigscan_core::IncludeLoader for NoFiles {
 /// shape for both roles is the one pair URDF has to write as two elements, so it is split.
 ///
 /// What the writer reported as lost is removed the way it was: an inertial without a mass and a
-/// tensor is left out, a second joint to one child is not written, and a joint type URDF does not
-/// define becomes a fixed joint.
+/// tensor is left out, a second joint to one child is not written, a joint type URDF does not
+/// define becomes a fixed joint, and a limit value the writer made up is cleared.
 fn essence(mut r: Robot, lost: &[Unmapped]) -> Robot {
     let named = |what: &str| -> HashSet<String> {
         lost.iter()
@@ -33,7 +33,21 @@ fn essence(mut r: Robot, lost: &[Unmapped]) -> Robot {
         .filter(|u| u.what.starts_with("joint/") && u.what != "joint/multiple")
         .filter_map(|u| u.name.clone())
         .collect();
+    let (no_effort, no_velocity) = (
+        named("limit/effort/default"),
+        named("limit/velocity/default"),
+    );
     r.joints.retain(|j| !extra.contains(&j.name));
+    for j in &mut r.joints {
+        if let Some(l) = &mut j.limit {
+            if no_effort.contains(&j.name) {
+                l.effort = None;
+            }
+            if no_velocity.contains(&j.name) {
+                l.velocity = None;
+            }
+        }
+    }
     for l in &mut r.links {
         if no_inertial.contains(&l.name) {
             l.inertial = None;
@@ -291,6 +305,39 @@ fn a_second_joint_to_one_child_is_not_written_and_is_reported() {
         out.lost
     );
     assert_round_trip("multiple", robot);
+}
+
+#[test]
+fn a_range_without_effort_and_velocity_is_written_with_zeros_and_reported() {
+    let robot = parse_mjcf(
+        r#"<mujoco><worldbody><body name="a">
+  <joint name="h" type="hinge" axis="0 0 1" range="-1 1"/>
+  <body name="b"><joint name="s" type="slide" axis="1 0 0" range="0 1"/></body>
+</body></worldbody></mujoco>"#,
+        &NoFiles,
+    )
+    .unwrap()
+    .to_robot()
+    .unwrap();
+    let out = write_urdf(&robot);
+
+    let back = parse_urdf(&out.text).unwrap();
+    let rs013: Vec<_> = rigscan_core::lint(&back)
+        .into_iter()
+        .filter(|f| f.rule == "RS013")
+        .collect();
+    assert!(rs013.is_empty(), "{rs013:?}\n{}", out.text);
+    for what in ["limit/effort/default", "limit/velocity/default"] {
+        for joint in ["h", "s"] {
+            assert!(
+                out.lost
+                    .iter()
+                    .any(|u| u.what == what && u.name.as_deref() == Some(joint)),
+                "{what} {joint}: {:?}",
+                out.lost
+            );
+        }
+    }
 }
 
 #[test]

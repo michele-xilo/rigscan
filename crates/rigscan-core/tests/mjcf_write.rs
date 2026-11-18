@@ -37,10 +37,11 @@ fn reported(lost: &[Unmapped], what: &str) -> HashSet<String> {
 /// - MJCF always has a world to weld a root link to, so a `world` link the source did not have
 ///   and its welds are dropped.
 fn essence(mut r: Robot, lost: &[Unmapped], had_world: bool) -> Robot {
+    // The URDF writer makes up a 0 for both when MJCF has none; the same normalisation applies.
     let (mimic, effort, velocity, limit) = (
         reported(lost, "mimic"),
-        reported(lost, "limit/effort"),
-        reported(lost, "limit/velocity"),
+        &reported(lost, "limit/effort") | &reported(lost, "limit/effort/default"),
+        &reported(lost, "limit/velocity") | &reported(lost, "limit/velocity/default"),
         reported(lost, "limit"),
     );
     let capsule = reported(lost, "capsule");

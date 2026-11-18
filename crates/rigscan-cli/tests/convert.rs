@@ -352,3 +352,196 @@ fn shapes_without_a_mesh_and_absolute_paths_survive_a_move() {
     assert!(written.contains("type=\"box\""), "{written}");
     assert!(written.contains("file=\"/abs/a.stl\""), "{written}");
 }
+
+const WITH_MATERIAL: &str = r#"<robot name="arm">
+  <link name="base"/>
+  <link name="upper">
+    <visual>
+      <geometry><box size="1 1 1"/></geometry>
+      <material name="red"/>
+    </visual>
+  </link>
+  <joint name="shoulder" type="continuous">
+    <parent link="base"/>
+    <child link="upper"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+</robot>"#;
+
+fn json(path: &Path) -> serde_json::Value {
+    serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
+}
+
+#[test]
+fn each_kind_of_loss_gets_its_meaning_and_a_total() {
+    let root = tree("meaning", &[("arm.urdf", WITH_EFFORT)]);
+    let out = convert(&root, &["arm.urdf", "--to", "mjcf"]);
+
+    let err = stderr(&out);
+    assert!(
+        err.contains(
+            "lost limit/effort: shoulder\n  MJCF has no effort limit on a joint; it was left out.\n"
+        ),
+        "{err}"
+    );
+    assert!(err.contains("lost limit/velocity: shoulder\n  "), "{err}");
+    assert!(err.ends_with("2 kinds of loss, 2 elements\n"), "{err}");
+}
+
+#[test]
+fn a_loss_from_the_reader_shows_its_position_and_a_generic_meaning() {
+    let root = tree("reader-loss", &[("arm.urdf", WITH_MATERIAL)]);
+    let out = convert(&root, &["arm.urdf", "--to", "mjcf"]);
+
+    let err = stderr(&out);
+    assert!(err.contains("lost visual/material: upper (6:7)\n"), "{err}");
+    assert!(
+        err.contains("  The neutral model has no field for it; it was not carried over.\n"),
+        "{err}"
+    );
+    assert!(err.ends_with("1 kind of loss, 1 element\n"), "{err}");
+}
+
+#[test]
+fn the_loss_report_is_written_as_json() {
+    let root = tree("json", &[("arm.urdf", WITH_MATERIAL)]);
+    let out = convert(
+        &root,
+        &["arm.urdf", "--to", "mjcf", "--loss-report", "loss.json"],
+    );
+    assert_eq!(out.status.code(), Some(1));
+
+    let r = json(&root.join("loss.json"));
+    assert_eq!(r["version"], 1);
+    assert_eq!(r["input"], "arm.urdf");
+    assert_eq!(r["from"], "urdf");
+    assert_eq!(r["to"], "mjcf");
+    assert_eq!(r["counts"]["visual/material"], 1);
+    let lost = &r["lost"][0];
+    assert_eq!(lost["id"], "visual/material");
+    assert_eq!(lost["kind"], "dropped");
+    assert_eq!(lost["name"], "upper");
+    assert_eq!(lost["line"], 6);
+    assert_eq!(lost["column"], 7);
+    assert!(lost["summary"].as_str().unwrap().contains("neutral model"));
+}
+
+#[test]
+fn a_loss_without_a_position_has_null_line_and_column() {
+    let root = tree("json-nopos", &[("arm.urdf", WITH_EFFORT)]);
+    convert(
+        &root,
+        &["arm.urdf", "--to", "mjcf", "--loss-report", "loss.json"],
+    );
+
+    let r = json(&root.join("loss.json"));
+    let effort = r["lost"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l["id"] == "limit/effort")
+        .unwrap();
+    assert_eq!(effort["kind"], "dropped");
+    assert!(effort["line"].is_null() && effort["column"].is_null());
+    assert_eq!(r["counts"]["limit/velocity"], 1);
+}
+
+#[test]
+fn a_lossless_conversion_writes_an_empty_report() {
+    let root = tree("json-clean", &[("arm.urdf", ARM)]);
+    let out = convert(
+        &root,
+        &["arm.urdf", "--to", "mjcf", "--loss-report", "loss.json"],
+    );
+    assert_eq!(out.status.code(), Some(0));
+
+    let r = json(&root.join("loss.json"));
+    assert_eq!(r["lost"].as_array().unwrap().len(), 0);
+    assert_eq!(r["counts"].as_object().unwrap().len(), 0);
+}
+
+#[test]
+fn an_invented_value_is_marked_as_invented() {
+    let root = tree("json-invented", &[("arm.xml", RANGED)]);
+    convert(
+        &root,
+        &["arm.xml", "--to", "urdf", "--loss-report", "loss.json"],
+    );
+
+    let r = json(&root.join("loss.json"));
+    let kinds: Vec<_> = r["lost"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|l| l["id"] == "limit/effort/default")
+        .map(|l| l["kind"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(kinds, ["invented"]);
+}
+
+#[test]
+fn a_refused_conversion_writes_no_report() {
+    let root = tree("json-refused", &[("bad.urdf", BROKEN)]);
+    let out = convert(
+        &root,
+        &["bad.urdf", "--to", "mjcf", "--loss-report", "loss.json"],
+    );
+
+    assert_eq!(out.status.code(), Some(2));
+    assert!(!root.join("loss.json").exists());
+}
+
+#[test]
+fn a_report_that_cannot_be_written_is_an_error() {
+    let root = tree("json-unwritable", &[("arm.urdf", ARM)]);
+    let out = convert(
+        &root,
+        &[
+            "arm.urdf",
+            "--to",
+            "mjcf",
+            "--loss-report",
+            "missing/loss.json",
+        ],
+    );
+
+    assert_eq!(out.status.code(), Some(2));
+    assert!(
+        stderr(&out).contains("missing/loss.json"),
+        "{}",
+        stderr(&out)
+    );
+}
+
+const RANGED: &str = r#"<mujoco><worldbody><body name="a">
+  <joint name="h" type="hinge" axis="0 0 1" range="-1 1"/>
+</body></worldbody></mujoco>"#;
+
+const ROTATED_TENSOR: &str = r#"<robot name="arm">
+  <link name="base"/>
+  <link name="upper">
+    <inertial>
+      <origin xyz="0 0 0.1" rpy="0 0 0.5"/>
+      <mass value="2"/>
+      <inertia ixx="0.1" ixy="0.01" ixz="0" iyy="0.2" iyz="0" izz="0.3"/>
+    </inertial>
+  </link>
+  <joint name="shoulder" type="continuous">
+    <parent link="base"/>
+    <child link="upper"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+</robot>"#;
+
+#[test]
+fn a_rewritten_value_is_marked_as_changed() {
+    let root = tree("json-changed", &[("arm.urdf", ROTATED_TENSOR)]);
+    convert(
+        &root,
+        &["arm.urdf", "--to", "mjcf", "--loss-report", "loss.json"],
+    );
+
+    let r = json(&root.join("loss.json"));
+    assert_eq!(r["lost"][0]["id"], "inertial/frame");
+    assert_eq!(r["lost"][0]["kind"], "changed");
+}

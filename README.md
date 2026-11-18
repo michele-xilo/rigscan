@@ -30,7 +30,7 @@ No config and no simulator needed. Exit code 0 means no critical findings and 1 
 CI step. To try it on a robot with known problems, run it on [examples/broken_arm.urdf](examples/broken_arm.urdf).
 Every option and output format (`text`, `full`, `report`, `json`) is in [docs/usage.md](docs/usage.md).
 
-To convert between URDF and MJCF and see what was lost: `rigscan convert robot.urdf --to mjcf -o robot.xml`.
+To convert between URDF and MJCF and see what was lost: `rigscan convert robot.urdf --to mjcf -o robot.xml` (add `--loss-report loss.json` for a JSON list).
 
 ## Try it in your browser
 

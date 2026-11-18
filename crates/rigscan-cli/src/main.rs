@@ -7,7 +7,7 @@ use output::Scanned;
 use rayon::prelude::*;
 use rigscan_core::{
     lint_mjcf, lint_usd, lint_with, parse_mjcf, parse_urdf, parse_usd, write_mjcf, write_urdf,
-    Converted, Format, Geometry, Robot, Severity, Unmapped,
+    Format, Geometry, Robot, Severity,
 };
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -74,6 +74,9 @@ enum Command {
         /// Write the result to this file instead of stdout
         #[arg(short, long)]
         output: Option<PathBuf>,
+        /// Write what was lost to this file as JSON
+        #[arg(long)]
+        loss_report: Option<PathBuf>,
     },
 }
 
@@ -86,12 +89,22 @@ fn main() -> ExitCode {
             quiet,
             statistics,
         } => scan(&paths, output_format, color, quiet, statistics),
-        Command::Convert { input, to, output } => convert(&input, to, output.as_deref()),
+        Command::Convert {
+            input,
+            to,
+            output,
+            loss_report,
+        } => convert(&input, to, output.as_deref(), loss_report.as_deref()),
     }
 }
 
 /// Exit codes: 0 nothing lost, 1 something lost, 2 the input was refused or the output not written.
-fn convert(input: &Path, to: Target, output: Option<&Path>) -> ExitCode {
+fn convert(
+    input: &Path,
+    to: Target,
+    output: Option<&Path>,
+    loss_report: Option<&Path>,
+) -> ExitCode {
     let refuse = |msg: String| {
         eprintln!("{msg}");
         ExitCode::from(2)
@@ -142,7 +155,14 @@ fn convert(input: &Path, to: Target, output: Option<&Path>) -> ExitCode {
     if let Err(msg) = written {
         return refuse(msg);
     }
-    report_losses(&converted);
+    eprint!("{}", output::loss_text(&converted.lost));
+    if let Some(path) = loss_report {
+        let doc = output::loss_json(input, scanned.format, target, &converted.lost);
+        let text = serde_json::to_string_pretty(&doc).unwrap_or_default();
+        if let Err(e) = std::fs::write(path, text + "\n") {
+            return refuse(format!("{}: {e}", path.display()));
+        }
+    }
     ExitCode::from(u8::from(!converted.lost.is_empty()))
 }
 
@@ -182,21 +202,6 @@ fn rebase_meshes(robot: &mut Robot, input: &Path, output: &Path) {
                 *filename = prefix.join(&*filename).to_string_lossy().into_owned();
             }
         }
-    }
-}
-
-/// One line per kind of loss, with the names it hit.
-fn report_losses(converted: &Converted) {
-    let mut kinds: Vec<(&str, Vec<&str>)> = Vec::new();
-    for Unmapped { what, name, .. } in &converted.lost {
-        let name = name.as_deref().unwrap_or("-");
-        match kinds.iter_mut().find(|(k, _)| k == what) {
-            Some((_, names)) => names.push(name),
-            None => kinds.push((what, vec![name])),
-        }
-    }
-    for (what, names) in kinds {
-        eprintln!("lost {what}: {}", names.join(", "));
     }
 }
 

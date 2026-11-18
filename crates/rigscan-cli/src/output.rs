@@ -1,7 +1,8 @@
 //! Rendering of scan results: findings only, per-element report, or JSON.
 
 use rigscan_core::{
-    report, Element, ElementStatus, Finding, Format, Report, Robot, Severity, Span, Status, Verdict,
+    loss_info, report, Element, ElementStatus, Finding, Format, LossKind, Report, Robot, Severity,
+    Span, Status, Unmapped, Verdict,
 };
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -302,5 +303,99 @@ pub fn json_document(results: &[(&Path, &Result<Scanned, String>)]) -> Value {
             "critical": total.critical,
             "errors": errors,
         },
+    })
+}
+
+/// Kind and meaning of a loss id; an id from a reader is an element or attribute the neutral
+/// model has no field for.
+fn describe(id: &str) -> (&'static str, &'static str) {
+    match loss_info(id) {
+        Some(i) => (
+            match i.kind {
+                LossKind::Dropped => "dropped",
+                LossKind::Changed => "changed",
+                LossKind::Invented => "invented",
+            },
+            i.summary,
+        ),
+        None => (
+            "dropped",
+            "The neutral model has no field for it; it was not carried over.",
+        ),
+    }
+}
+
+/// The losses grouped by id in the order first met, each with the names it hit.
+fn group_losses(lost: &[Unmapped]) -> Vec<(&str, Vec<&Unmapped>)> {
+    let mut groups: Vec<(&str, Vec<&Unmapped>)> = Vec::new();
+    for u in lost {
+        match groups.iter_mut().find(|(id, _)| *id == u.what) {
+            Some((_, items)) => items.push(u),
+            None => groups.push((&u.what, vec![u])),
+        }
+    }
+    groups
+}
+
+/// One line per kind of loss with the names it hit, its meaning under it, and a total.
+pub fn loss_text(lost: &[Unmapped]) -> String {
+    let groups = group_losses(lost);
+    let mut out = String::new();
+    for (id, items) in &groups {
+        let names: Vec<String> = items
+            .iter()
+            .map(|u| {
+                let name = u.name.as_deref().unwrap_or("-");
+                if u.span.is_none() {
+                    name.to_string()
+                } else {
+                    format!("{name} ({}:{})", u.span.line, u.span.col)
+                }
+            })
+            .collect();
+        out.push_str(&format!(
+            "lost {id}: {}\n  {}\n",
+            names.join(", "),
+            describe(id).1
+        ));
+    }
+    if !groups.is_empty() {
+        out.push_str(&format!(
+            "{}, {}\n",
+            plural(groups.len(), "kind of loss", "kinds of loss"),
+            plural(lost.len(), "element", "elements")
+        ));
+    }
+    out
+}
+
+/// The loss report document, version 1.
+pub fn loss_json(input: &Path, from: Format, to: Format, lost: &[Unmapped]) -> Value {
+    let entries: Vec<Value> = lost
+        .iter()
+        .map(|u| {
+            let (kind, summary) = describe(&u.what);
+            let (line, column) = position(u.span);
+            json!({
+                "id": u.what,
+                "kind": kind,
+                "summary": summary,
+                "name": u.name,
+                "line": line,
+                "column": column,
+            })
+        })
+        .collect();
+    let counts: serde_json::Map<String, Value> = group_losses(lost)
+        .into_iter()
+        .map(|(id, items)| (id.to_string(), json!(items.len())))
+        .collect();
+    json!({
+        "version": 1,
+        "input": input.display().to_string(),
+        "from": format_name(from),
+        "to": format_name(to),
+        "lost": entries,
+        "counts": counts,
     })
 }

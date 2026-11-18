@@ -2,6 +2,7 @@
 
 mod files;
 mod lint;
+mod loss;
 mod mjcf;
 mod mjcf_map;
 mod mjcf_rules;
@@ -19,6 +20,7 @@ mod usd_shapes;
 
 pub use files::{Resolution, Resolver};
 pub use lint::{lint, lint_with, Finding, Severity};
+pub use loss::{loss_info, LossInfo, LossKind};
 pub use mjcf::{parse_mjcf, IncludeLoader, Included, Mjcf, MjcfNode, Reference};
 pub use mjcf_rules::lint_mjcf;
 pub use mjcf_write::write_mjcf;

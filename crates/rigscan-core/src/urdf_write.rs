@@ -178,11 +178,14 @@ fn write_joint(out: &mut String, j: &Joint, lost: &mut Vec<Unmapped>) {
         // with no bound is left alone: written with zeros it would read as a joint locked at 0.
         let needed = matches!(j.kind, JointKind::Revolute | JointKind::Prismatic)
             && (l.lower.is_some() || l.upper.is_some());
-        for (key, value) in [("effort", l.effort), ("velocity", l.velocity)] {
+        for (key, id, value) in [
+            ("effort", "limit/effort/default", l.effort),
+            ("velocity", "limit/velocity/default", l.velocity),
+        ] {
             match value {
                 None if needed => {
                     number(out, key, 0.0);
-                    lose(lost, &format!("limit/{key}/default"), &j.name);
+                    lose(lost, id, &j.name);
                 }
                 _ => optional(out, key, value),
             }

@@ -58,6 +58,19 @@ stderr, one line per kind of loss with the names it hit (`lost limit/effort: sho
 it makes up is `0` for the `effort` and `velocity` of a revolute or prismatic limit, which URDF requires and MJCF does not
 have; it is reported as `limit/effort/default` and `limit/velocity/default`.
 
+Under each line is what the loss means, and a total ends the list:
+
+```text
+lost limit/effort: shoulder
+  MJCF has no effort limit on a joint; it was left out.
+1 kind of loss, 1 element
+```
+
+A name that was read from the source shows where: `upper (6:7)`. `--loss-report loss.json` also writes the list as JSON:
+`version` (1), `input`, `from`, `to`, `lost` (each with `id`, `kind`, `summary`, `name`, `line`, `column`; the position is
+`null` when unknown) and `counts` per id. The kinds are `dropped`, `changed` and `invented`. Every id is listed in
+[losses.md](losses.md). No report is written when the input is refused.
+
 Exit code 0 means nothing was lost, 1 means something was, and 2 means the input was not converted: it does not
 parse, it has critical findings (they are printed, a missing mesh file excepted), the output could not be written, or
 it is already in the target format.

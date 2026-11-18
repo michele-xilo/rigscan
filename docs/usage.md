@@ -54,8 +54,9 @@ rigscan convert robot.xml --to urdf          # text goes to stdout without -o
 ```
 
 The input can be URDF, MJCF or USD; `--to` is `urdf` or `mjcf`. What the target format cannot hold is listed on
-stderr, one line per kind of loss with the names it hit (`lost limit/effort: shoulder, elbow`). Nothing is invented:
-a value the source does not have is not added.
+stderr, one line per kind of loss with the names it hit (`lost limit/effort: shoulder, elbow`). The one value
+it makes up is `0` for the `effort` and `velocity` of a revolute or prismatic limit, which URDF requires and MJCF does not
+have; it is reported as `limit/effort/default` and `limit/velocity/default`.
 
 Exit code 0 means nothing was lost, 1 means something was, and 2 means the input was not converted: it does not
 parse, it has critical findings (they are printed, a missing mesh file excepted), the output could not be written, or

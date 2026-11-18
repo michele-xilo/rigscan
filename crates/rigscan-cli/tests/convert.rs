@@ -516,3 +516,32 @@ fn a_report_that_cannot_be_written_is_an_error() {
 const RANGED: &str = r#"<mujoco><worldbody><body name="a">
   <joint name="h" type="hinge" axis="0 0 1" range="-1 1"/>
 </body></worldbody></mujoco>"#;
+
+const ROTATED_TENSOR: &str = r#"<robot name="arm">
+  <link name="base"/>
+  <link name="upper">
+    <inertial>
+      <origin xyz="0 0 0.1" rpy="0 0 0.5"/>
+      <mass value="2"/>
+      <inertia ixx="0.1" ixy="0.01" ixz="0" iyy="0.2" iyz="0" izz="0.3"/>
+    </inertial>
+  </link>
+  <joint name="shoulder" type="continuous">
+    <parent link="base"/>
+    <child link="upper"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+</robot>"#;
+
+#[test]
+fn a_rewritten_value_is_marked_as_changed() {
+    let root = tree("json-changed", &[("arm.urdf", ROTATED_TENSOR)]);
+    convert(
+        &root,
+        &["arm.urdf", "--to", "mjcf", "--loss-report", "loss.json"],
+    );
+
+    let r = json(&root.join("loss.json"));
+    assert_eq!(r["lost"][0]["id"], "inertial/frame");
+    assert_eq!(r["lost"][0]["kind"], "changed");
+}

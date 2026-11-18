@@ -67,14 +67,13 @@ mod tests {
         let mut ids = Vec::new();
         for src in [include_str!("urdf_write.rs"), include_str!("mjcf_write.rs")] {
             let code = src.split("#[cfg(test)]").next().unwrap_or(src);
-            for call in code.split("lose(").skip(1) {
-                let Some(start) = call.find('"') else {
-                    continue;
-                };
-                // A call without a literal id (the definitions) has other code before the quote.
-                if call[..start].contains(')') || call[..start].contains('{') {
-                    continue;
-                }
+            // A call without a literal id (the definitions) has other code before the quote.
+            let literal = |call: &str| call.find('"').filter(|&q| !call[..q].contains([')', '{']));
+            for (call, start) in code
+                .split("lose(")
+                .skip(1)
+                .filter_map(|c| literal(c).map(|q| (c, q)))
+            {
                 let rest = &call[start + 1..];
                 let id = &rest[..rest.find('"').unwrap_or(0)];
                 ids.push(match id.find('{') {

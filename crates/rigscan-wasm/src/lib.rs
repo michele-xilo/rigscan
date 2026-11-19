@@ -3,9 +3,10 @@
 //! The page cannot read the disk, so every file a robot refers to has to be in the dropped set.
 
 use rigscan_core::{
-    lint_mjcf, lint_usd, lint_with, parse_mjcf, parse_urdf, parse_usd, report, Element, Finding,
-    Format, Geometry, IncludeLoader, Included, JointKind, ParseError, Resolution, Resolver, Robot,
-    Role, Severity, Shape, Span, Status, UsdLoader,
+    lint_mjcf, lint_usd, lint_with, loss_info, parse_mjcf, parse_urdf, parse_usd, report,
+    write_mjcf, write_urdf, write_usd, Converted, Element, Finding, Format, Geometry,
+    IncludeLoader, Included, JointKind, LossKind, ParseError, Resolution, Resolver, Robot, Role,
+    Severity, Shape, Span, Status, UsdLoader,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -24,7 +25,15 @@ pub fn scan_bundle(main: &str, files: BTreeMap<String, Vec<u8>>) -> Value {
     }
 }
 
-fn scan(main: &str, files: Files) -> Result<Value, String> {
+/// A file read into the neutral model, with what the linter found.
+struct Loaded {
+    format: Format,
+    source: String,
+    robot: Robot,
+    findings: Vec<Finding>,
+}
+
+fn load(main: &str, files: &Files) -> Result<Loaded, String> {
     let bytes = files
         .get(main)
         .ok_or_else(|| format!("{main}: file was not provided"))?;
@@ -35,7 +44,6 @@ fn scan(main: &str, files: Files) -> Result<Value, String> {
         Format::Usd => String::new(),
         _ => String::from_utf8_lossy(bytes).into_owned(),
     };
-    let bundle = files.clone();
     let (robot, findings) = match format {
         Format::Urdf => {
             let robot = parse_urdf(&source).map_err(at)?;
@@ -44,7 +52,7 @@ fn scan(main: &str, files: Files) -> Result<Value, String> {
         }
         Format::Mjcf => {
             let loader = BundleLoader {
-                files,
+                files: files.clone(),
                 main: main.to_string(),
             };
             let mjcf = parse_mjcf(&source, &loader).map_err(at)?;
@@ -53,13 +61,97 @@ fn scan(main: &str, files: Files) -> Result<Value, String> {
             (robot, findings)
         }
         Format::Usd => {
-            let usd = parse_usd(main, BundleUsdLoader(files)).map_err(at)?;
+            let usd = parse_usd(main, BundleUsdLoader(files.clone())).map_err(at)?;
             let robot = usd.to_robot().map_err(at)?;
             let findings = lint_usd(&usd, &robot);
             (robot, findings)
         }
     };
-    Ok(describe(main, format, &source, &robot, &findings, &bundle))
+    Ok(Loaded {
+        format,
+        source,
+        robot,
+        findings,
+    })
+}
+
+fn scan(main: &str, files: Files) -> Result<Value, String> {
+    let l = load(main, &files)?;
+    Ok(describe(
+        main,
+        l.format,
+        &l.source,
+        &l.robot,
+        &l.findings,
+        &files,
+    ))
+}
+
+/// Convert `main` to `to` (`urdf`, `mjcf` or `usd`) and describe what the target could not hold.
+///
+/// Always returns an object: `{ text, extension, to, lost }`, or `{ path, error }` when the file
+/// cannot be converted. A robot with a critical finding is refused and its findings are returned,
+/// as the CLI does; a missing mesh file (RS014) does not stop a conversion, because only the
+/// dropped files are visible.
+pub fn convert_bundle(main: &str, files: BTreeMap<String, Vec<u8>>, to: &str) -> Value {
+    let main = normalize(main);
+    convert(&main, Rc::new(files), to)
+        .unwrap_or_else(|error| json!({ "path": main, "error": error }))
+}
+
+fn convert(main: &str, files: Files, to: &str) -> Result<Value, String> {
+    let (target, extension, writer): (Format, &str, fn(&Robot) -> Converted) = match to {
+        "urdf" => (Format::Urdf, "urdf", write_urdf),
+        "mjcf" => (Format::Mjcf, "xml", write_mjcf),
+        "usd" => (Format::Usd, "usda", write_usd),
+        other => {
+            return Err(format!(
+                "unknown target format {other:?}: use urdf, mjcf or usd"
+            ))
+        }
+    };
+    let l = load(main, &files)?;
+    if l.format == target {
+        return Err(format!("{main}: already {}", to.to_uppercase()));
+    }
+    let critical: Vec<&Finding> = l
+        .findings
+        .iter()
+        .filter(|f| f.severity == Severity::Critical && f.rule != "RS014")
+        .collect();
+    if !critical.is_empty() {
+        let findings: Vec<Value> = critical.iter().map(|f| finding(&l.robot, f)).collect();
+        return Ok(json!({
+            "path": main,
+            "error": format!("{main}: not converted, fix the findings"),
+            "findings": findings,
+        }));
+    }
+    let out = writer(&l.robot);
+    let lost: Vec<Value> = out
+        .lost
+        .iter()
+        .map(|u| {
+            let (kind, summary) = match loss_info(&u.what) {
+                Some(i) => (loss_kind(i.kind), i.summary),
+                None => (
+                    "dropped",
+                    "The neutral model has no field for it; it was not carried over.",
+                ),
+            };
+            let (line, column) = position(u.span);
+            json!({ "id": u.what, "kind": kind, "summary": summary, "name": u.name, "line": line, "column": column })
+        })
+        .collect();
+    Ok(json!({ "path": main, "to": to, "extension": extension, "text": out.text, "lost": lost }))
+}
+
+fn loss_kind(k: LossKind) -> &'static str {
+    match k {
+        LossKind::Dropped => "dropped",
+        LossKind::Changed => "changed",
+        LossKind::Invented => "invented",
+    }
 }
 
 fn describe(
@@ -114,22 +206,24 @@ fn describe(
                 "column": column,
             })
         }).collect::<Vec<_>>(),
-        "findings": findings.iter().map(|f| {
-            let (line, column) = position(f.span);
-            json!({
-                "rule": f.rule,
-                "severity": match f.severity { Severity::Warning => "warning", Severity::Critical => "critical" },
-                "message": f.message,
-                "line": line,
-                "column": column,
-                "element": element(robot, f.element),
-            })
-        }).collect::<Vec<_>>(),
+        "findings": findings.iter().map(|f| finding(robot, f)).collect::<Vec<_>>(),
         "unmapped": robot.unmapped.iter().map(|u| {
             let (line, column) = position(u.span);
             json!({ "what": u.what, "name": u.name, "line": line, "column": column })
         }).collect::<Vec<_>>(),
         "source": source,
+    })
+}
+
+fn finding(robot: &Robot, f: &Finding) -> Value {
+    let (line, column) = position(f.span);
+    json!({
+        "rule": f.rule,
+        "severity": match f.severity { Severity::Warning => "warning", Severity::Critical => "critical" },
+        "message": f.message,
+        "line": line,
+        "column": column,
+        "element": element(robot, f.element),
     })
 }
 
@@ -318,4 +412,26 @@ pub fn scan_files(main: &str, paths: &js_sys::Array, files: &js_sys::Array) -> S
         })
         .collect();
     scan_bundle(main, bundle).to_string()
+}
+
+/// Convert from JavaScript, with the arguments of `scan_files` and a target of `urdf`, `mjcf` or `usd`.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn convert_files(main: &str, paths: &js_sys::Array, files: &js_sys::Array, to: &str) -> String {
+    let bundle = paths
+        .iter()
+        .zip(files.iter())
+        .filter_map(|(p, f)| {
+            let path = normalize(&p.as_string()?);
+            Some((path, js_sys::Uint8Array::new(&f).to_vec()))
+        })
+        .collect();
+    convert_bundle(main, bundle, to).to_string()
+}
+
+/// The Rigscan version the module was built from.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
 }

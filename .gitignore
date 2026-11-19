@@ -9,3 +9,5 @@ target/
 /web/pkg/
 /web/assets/
 /web/sample/
+space-build/
+__pycache__/

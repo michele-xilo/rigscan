@@ -36,7 +36,9 @@ To convert between URDF, MJCF and USD (`.usda`) and see what was lost: `rigscan 
 
 The [viewer](https://michele-xilo.github.io/rigscan/) runs Rigscan as WebAssembly: drop a URDF, MJCF or USD file (or a
 folder) and see the robot in 3D (primitives and STL or OBJ meshes), the kinematic tree coloured by health, the findings, and the source line each one
-points at. Nothing is uploaded. It is also the test of the WebAssembly build.
+points at, and convert it to URDF, MJCF or USD with the list of what the conversion lost. Nothing is uploaded. It is also the test of the WebAssembly build.
+
+The same scan and conversion run as a Gradio app on the [Hugging Face Space](https://huggingface.co/spaces/michele-xilo/rigscan) (`space/`). Each release updates the viewer and the Space together; see [docs/release.md](docs/release.md).
 
 ## What it catches
 
@@ -83,7 +85,7 @@ points at. Nothing is uploaded. It is also the test of the WebAssembly build.
 | USD (UsdPhysics) | yes | yes | planned |
 
 The library (`rigscan-core`) compiles for WebAssembly and powers the browser viewer; the CLI is the other surface. A
-Python wheel, joint sliders in the viewer, SARIF output and URDF/MJCF/USD conversion with a report of what each conversion loses are on the
+Python wheel, joint sliders in the viewer and SARIF output are on the
 [roadmap](https://github.com/michele-xilo/rigscan/issues).
 
 ## More

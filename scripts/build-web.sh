@@ -10,5 +10,5 @@ wasm-bindgen --target web --no-typescript --remove-name-section --remove-produce
 
 mkdir -p web/assets web/sample
 cp assets/mark.svg assets/favicon.svg web/assets/
-cp examples/broken_arm.urdf web/sample/
+cp examples/broken_arm.urdf examples/arm.urdf web/sample/
 echo "built web/ ($(wc -c < web/pkg/rigscan_wasm_bg.wasm) bytes of wasm); serve it with: python3 -m http.server -d web 8000"

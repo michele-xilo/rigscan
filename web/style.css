@@ -68,7 +68,7 @@ ul.findings { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; 
 .finding .where { color: var(--muted); font-size: 13px; margin-left: auto; font-family: var(--mono); }
 .finding p { margin: 4px 0 0; }
 details { margin-top: 12px; color: var(--muted); }
-#unmapped { font-family: var(--mono); font-size: 14px; }
+#unmapped, #convert-lost { font-family: var(--mono); font-size: 14px; }
 #source { font: 13px/1.5 var(--mono); max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
 #source .row { display: grid; grid-template-columns: 4ch 1fr; gap: 12px; padding: 0 10px; white-space: pre; }
 #source .num { color: var(--muted); text-align: right; user-select: none; }

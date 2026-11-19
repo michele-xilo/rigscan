@@ -30,6 +30,7 @@
     <div class="actions">
       <label class="button">Choose files<input id="pick-files" type="file" multiple hidden></label>
       <label class="button">Choose folder<input id="pick-folder" type="file" webkitdirectory hidden></label>
+      <button id="sample-arm" type="button">Try a healthy arm</button>
       <button id="sample" type="button">Try a broken arm</button>
     </div>
     <label id="main-pick" hidden>Scan <select id="main"></select></label>
@@ -63,6 +64,16 @@
           <ul id="unmapped"></ul>
         </details>
       </section>
+      <section aria-labelledby="convert-title">
+        <h2 id="convert-title">Convert</h2>
+        <div class="actions">
+          <label>To <select id="convert-to"><option value="urdf">URDF</option><option value="mjcf">MJCF</option><option value="usd">USD</option></select></label>
+          <button id="convert" type="button">Convert</button>
+          <a id="download" class="button" hidden>Download</a>
+        </div>
+        <p id="convert-status" class="note" role="status"></p>
+        <ul id="convert-lost"></ul>
+      </section>
       <section class="source" aria-labelledby="source-title">
         <h2 id="source-title">Source <span id="source-name"></span></h2>
         <div id="source" tabindex="0" role="region" aria-label="Source file"></div>
@@ -72,7 +83,7 @@
 </main>
 
 <footer>
-  <a href="https://github.com/michele-xilo/rigscan">Rigscan on GitHub</a>
+  <a href="https://github.com/michele-xilo/rigscan">Rigscan on GitHub</a> · <span id="version"></span>
 </footer>
 <script type="module" src="app.js"></script>
 </body>

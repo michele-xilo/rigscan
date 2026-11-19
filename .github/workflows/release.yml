@@ -1,0 +1,91 @@
+name: Release
+
+# Publishing a GitHub release deploys the viewer to GitHub Pages and the app to the Hugging Face
+# Space from the same tag. workflow_dispatch redeploys the chosen ref by hand.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"]=="rigscan-cli"))')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = release ] && [ "${{ github.event.release.tag_name }}" != "v$version" ]; then
+            echo "tag ${{ github.event.release.tag_name }} does not match the workspace version v$version" >&2
+            exit 1
+          fi
+
+  pages:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      # Must match the wasm-bindgen version pinned in crates/rigscan-wasm/Cargo.toml.
+      - run: cargo install wasm-bindgen-cli --version 0.2.130 --locked
+      - run: scripts/build-web.sh
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  space:
+    needs: version
+    # Built on the oldest runner image so the binary runs on the Space's Debian: a binary links
+    # against the glibc it was built with and refuses to start on an older one.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release -p rigscan-cli
+      - run: scripts/stage-space.sh space-build
+      - name: The staged app works with the staged binary
+        run: RIGSCAN_BIN="$PWD/space-build/rigscan" python3 space/test_rigscan_space.py
+      - name: Upload to the Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ vars.HF_SPACE }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          if [ -z "$HF_TOKEN" ] || [ -z "$HF_SPACE" ]; then
+            echo "set the HF_TOKEN secret and the HF_SPACE variable (owner/name) to deploy the Space" >&2
+            exit 1
+          fi
+          pip install --quiet huggingface_hub
+          python3 - <<'PY'
+          import os
+          from huggingface_hub import HfApi
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          space = os.environ["HF_SPACE"]
+          api.create_repo(space, repo_type="space", space_sdk="gradio", exist_ok=True)
+          api.upload_folder(folder_path="space-build", repo_id=space, repo_type="space",
+                            commit_message=f"Release v{os.environ['VERSION']}")
+          PY

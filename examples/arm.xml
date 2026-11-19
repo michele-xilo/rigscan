@@ -1,0 +1,20 @@
+<mujoco model="arm">
+  <compiler angle="radian" eulerseq="XYZ"/>
+  <worldbody>
+    <body name="base">
+      <inertial pos="0 0 0.05" mass="2" diaginertia="0.01 0.01 0.01"/>
+      <geom type="box" size="0.1 0.1 0.05" pos="0 0 0.05" contype="0" conaffinity="0"/>
+      <geom type="box" size="0.1 0.1 0.05" pos="0 0 0.05" group="3"/>
+      <body name="upper" pos="0 0 0.1">
+        <inertial pos="0 0 0.15" mass="1" diaginertia="0.02 0.02 0.002"/>
+        <joint name="shoulder" type="hinge" axis="0 1 0" range="-1.5 1.5"/>
+        <geom type="cylinder" size="0.04 0.15" pos="0 0 0.15" contype="0" conaffinity="0"/>
+        <geom type="cylinder" size="0.04 0.15" pos="0 0 0.15" group="3"/>
+        <body name="fore" pos="0 0 0.3">
+          <inertial pos="0 0 0.1" mass="0.5" diaginertia="0.005 0.005 0.001"/>
+          <joint name="elbow" type="hinge" axis="0 1 0" range="0 2.4"/>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+</mujoco>

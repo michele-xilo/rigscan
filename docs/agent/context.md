@@ -231,8 +231,7 @@ names with empty contents, and keeps STL and OBJ bytes in JS. The JSON (`version
 (no bundler) that draws it, and `web/rig.js` draws the 3D skeleton, primitives and STL/OBJ meshes (one parsed per task so the page stays responsive;
 COLLADA and glTF are not drawn) with three.js (a pinned jsDelivr import map; forward
 kinematics from the joint origins, Z up); `scripts/build-web.sh` builds the `wasm` cargo profile (size-optimised, defined in the
-workspace `Cargo.toml`), runs `wasm-bindgen` and copies the logo and sample into `web/`. The Pages workflow
-deploys it from `main`.
+workspace `Cargo.toml`), runs `wasm-bindgen` and copies the logo and sample into `web/`. `convert_bundle(main, files, to)` (and the `convert_files` export) converts with the same writers as the CLI and returns `{ path, to, extension, text, lost }` with each loss's kind and meaning from `loss_info`, or `{ path, error }`; a robot with a critical finding other than RS014 is refused with its `findings`. The page's Convert panel draws it. `release.yml` deploys the page and the Space from a published release (see `docs/release.md`).
 
 `scripts/compare/compare.py` writes three generated blocks: the check coverage and speed tables in
 `docs/comparison.md`, and a short summary table in `README.md` (between `compare:*` markers). They use a tick, a

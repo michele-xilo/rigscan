@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<robot name="arm">
+  <link name="base">
+    <inertial>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <mass value="2"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <geometry><box size="0.2 0.2 0.1"/></geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <geometry><box size="0.2 0.2 0.1"/></geometry>
+    </collision>
+  </link>
+  <link name="upper">
+    <inertial>
+      <origin xyz="0 0 0.15" rpy="0 0 0"/>
+      <mass value="1"/>
+      <inertia ixx="0.02" ixy="0" ixz="0" iyy="0.02" iyz="0" izz="0.002"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.15" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.04" length="0.3"/></geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.15" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.04" length="0.3"/></geometry>
+    </collision>
+  </link>
+  <link name="fore">
+    <inertial>
+      <origin xyz="0 0 0.1" rpy="0 0 0"/>
+      <mass value="0.5"/>
+      <inertia ixx="0.005" ixy="0" ixz="0" iyy="0.005" iyz="0" izz="0.001"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.1" rpy="0 0 0"/>
+      <geometry><capsule radius="0.03" length="0.14"/></geometry>
+    </visual>
+  </link>
+  <joint name="shoulder" type="revolute">
+    <parent link="base"/>
+    <child link="upper"/>
+    <origin xyz="0 0 0.1" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-1.5" upper="1.5" effort="30" velocity="2"/>
+  </joint>
+  <joint name="elbow" type="revolute">
+    <parent link="upper"/>
+    <child link="fore"/>
+    <origin xyz="0 0 0.3" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="0" upper="2.4" effort="20" velocity="2"/>
+  </joint>
+</robot>

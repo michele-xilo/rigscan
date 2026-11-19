@@ -1,4 +1,4 @@
-import init, { scan_files } from './pkg/rigscan_wasm.js';
+import init, { scan_files, convert_files, version } from './pkg/rigscan_wasm.js';
 import { createRig } from './rig.js';
 
 const $ = (id) => document.getElementById(id);
@@ -47,6 +47,7 @@ async function start() {
   try {
     await init();
     ready = true;
+    $('version').textContent = `v${version()}`;
     setStatus('Ready. Open a robot to scan it.');
   } catch (e) {
     const hint = location.protocol === 'file:' ? ' Serve the web folder over http, for example: python3 -m http.server -d web' : '';
@@ -130,9 +131,55 @@ function run(main) {
     return setStatus(out.error, true);
   }
   result = out;
+  clearConvert();
   setStatus(`Scanned ${main} in ${ms < 10 ? ms.toFixed(1) : Math.round(ms)} ms.`);
   draw();
 }
+
+// ---- converting -------------------------------------------------------------
+
+let downloadUrl = null;
+
+function clearConvert() {
+  $('convert-status').textContent = '';
+  $('convert-lost').replaceChildren();
+  $('download').hidden = true;
+  if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+  downloadUrl = null;
+}
+
+function convert() {
+  if (!result) return;
+  clearConvert();
+  const paths = [...files.keys()];
+  const to = $('convert-to').value;
+  const out = JSON.parse(convert_files(result.path, paths, paths.map((p) => (READ.test(p) ? files.get(p) : EMPTY)), to));
+  const status = $('convert-status');
+  if (out.error) {
+    status.textContent = out.error;
+    $('convert-lost').replaceChildren(...(out.findings ?? []).map((f) => el('li', '', `${f.rule} ${f.severity}: ${f.message}`)));
+    return;
+  }
+  const stem = result.path.replace(/^.*\//, '').replace(/\.[^.]+$/, '');
+  const name = `${stem}.${out.extension}`;
+  downloadUrl = URL.createObjectURL(new Blob([out.text], { type: 'text/plain' }));
+  Object.assign($('download'), { href: downloadUrl, download: name, hidden: false, textContent: `Download ${name}` });
+  status.textContent = out.lost.length
+    ? `Converted to ${to.toUpperCase()}; ${out.lost.length} thing${out.lost.length === 1 ? '' : 's'} could not be carried over.`
+    : `Converted to ${to.toUpperCase()}; nothing was lost.`;
+  const byId = new Map();
+  for (const l of out.lost) {
+    if (!byId.has(l.id)) byId.set(l.id, { ...l, names: [] });
+    if (l.name) byId.get(l.id).names.push(l.name);
+  }
+  $('convert-lost').replaceChildren(...[...byId.values()].map((l) => {
+    const li = el('li');
+    li.append(el('strong', '', `${l.kind} ${l.id}`), el('span', '', l.names.length ? `: ${l.names.join(', ')}` : ''), el('br'), el('span', 'note', l.summary));
+    return li;
+  }));
+}
+
+$('convert').addEventListener('click', convert);
 
 function pill(status, n) {
   return el('span', `pill ${status}`, `${n} ${WORD[status]}`);
@@ -307,10 +354,12 @@ function select(sel, from, finding) {
 $('pick-files').addEventListener('change', async (e) => load(await fromList(e.target.files)));
 $('pick-folder').addEventListener('change', async (e) => load(await fromList(e.target.files)));
 $('main').addEventListener('change', (e) => run(e.target.value));
-$('sample').addEventListener('click', async () => {
-  const res = await fetch('sample/broken_arm.urdf');
-  load(new Map([['broken_arm.urdf', new Uint8Array(await res.arrayBuffer())]]));
-});
+for (const [id, name] of [['sample', 'broken_arm.urdf'], ['sample-arm', 'arm.urdf']]) {
+  $(id).addEventListener('click', async () => {
+    const res = await fetch(`sample/${name}`);
+    load(new Map([[name, new Uint8Array(await res.arrayBuffer())]]));
+  });
+}
 
 const drop = $('drop');
 document.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });

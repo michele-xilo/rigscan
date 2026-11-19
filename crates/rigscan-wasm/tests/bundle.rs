@@ -1,4 +1,4 @@
-use rigscan_wasm::scan_bundle;
+use rigscan_wasm::{convert_bundle, scan_bundle};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
@@ -349,4 +349,65 @@ fn a_mesh_that_was_not_dropped_is_unresolved() {
         resolved("package://arm/meshes/a.stl", &["robot/meshes/b.stl"]),
         Value::Null
     );
+}
+
+fn convert(main: &str, files: &[(&str, &str)], to: &str) -> Value {
+    convert_bundle(main, bundle(files), to)
+}
+
+#[test]
+fn a_urdf_converts_to_usd_with_its_text_and_no_losses() {
+    let v = convert("arm.urdf", &[("arm.urdf", HEALTHY)], "usd");
+    assert!(v["text"].as_str().unwrap().starts_with("#usda 1.0"), "{v}");
+    assert_eq!(v["lost"].as_array().unwrap().len(), 1, "{v}");
+    assert_eq!(v["lost"][0]["id"], "limit/velocity");
+    assert_eq!(v["lost"][0]["kind"], "dropped");
+    assert!(v["lost"][0]["summary"]
+        .as_str()
+        .unwrap()
+        .contains("velocity"));
+    assert_eq!(v["to"], "usd");
+    assert_eq!(v["extension"], "usda");
+}
+
+#[test]
+fn a_converted_file_reads_back_through_the_same_entry() {
+    let usd = convert("arm.urdf", &[("arm.urdf", HEALTHY)], "usd");
+    let text = usd["text"].as_str().unwrap();
+    let back = convert("arm.usda", &[("arm.usda", text)], "mjcf");
+    assert!(
+        back["text"].as_str().unwrap().starts_with("<mujoco"),
+        "{back}"
+    );
+    assert!(back["error"].is_null(), "{back}");
+}
+
+#[test]
+fn converting_to_the_format_it_is_in_is_an_error() {
+    let v = convert("arm.urdf", &[("arm.urdf", HEALTHY)], "urdf");
+    assert!(v["error"].as_str().unwrap().contains("already URDF"), "{v}");
+    assert!(v["text"].is_null());
+}
+
+#[test]
+fn an_unknown_target_is_an_error() {
+    let v = convert("arm.urdf", &[("arm.urdf", HEALTHY)], "sdf");
+    assert!(v["error"].as_str().unwrap().contains("sdf"), "{v}");
+}
+
+#[test]
+fn a_robot_with_a_critical_finding_is_refused_with_its_findings() {
+    let broken = HEALTHY.replace("<child link=\"hand\"/>", "<child link=\"ghost\"/>");
+    let v = convert("arm.urdf", &[("arm.urdf", &broken)], "mjcf");
+    assert!(
+        v["error"].as_str().unwrap().contains("not converted"),
+        "{v}"
+    );
+    assert!(!v["findings"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn a_file_that_was_not_provided_is_an_error() {
+    let v = convert("nope.urdf", &[], "mjcf");
+    assert!(v["error"].as_str().unwrap().contains("not provided"), "{v}");
 }

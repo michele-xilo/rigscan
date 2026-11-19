@@ -93,7 +93,7 @@ python3 -m http.server -d web 8000
 
 The scan logic is a plain function (`scan_bundle`) with native tests in `crates/rigscan-wasm/tests/`; the
 JavaScript only draws its JSON (the 3D view is `web/rig.js`, three.js and its STL and OBJ loaders from a pinned CDN import map, so the page needs
-network access). Pushes to `main` deploy `web/` to GitHub Pages.
+network access). Converting is `convert_bundle`, tested the same way. A published release deploys `web/` to GitHub Pages and the app in `space/` to the Hugging Face Space together; see [docs/release.md](docs/release.md).
 
 ### Adding a lint rule
 

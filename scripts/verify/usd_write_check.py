@@ -82,10 +82,10 @@ def compare(np, mujoco, pxr, usd_path, model):
         want = mr.T @ (d.xpos[b] - mp)
         have = ur.T @ (pos - up)
         if np.abs(want - have).max() > POSE:
-            return f"body {label}: position off by {np.abs(want - have).max():.4g}"
+            return "a body is not where the model puts it"
         mass = UsdPhysics.MassAPI(p).GetMassAttr().Get()
         if mass is not None and abs(mass - model.body_mass[b]) > MASS * max(1.0, model.body_mass[b]):
-            return f"body {label}: mass {mass} against {model.body_mass[b]}"
+            return "a body has another mass than the model"
     return None
 
 

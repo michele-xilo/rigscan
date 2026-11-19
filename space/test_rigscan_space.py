@@ -82,6 +82,24 @@ def test_a_file_over_the_cap_is_refused_before_it_is_read():
         assert "too large" in space.convert(str(p), "mjcf")["error"]
 
 
+def test_an_unsupported_extension_and_an_unknown_target_are_refused():
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "x.exe"
+        p.write_text("<robot/>")
+        assert "Unsupported" in space.scan(str(p))["error"]
+        assert "Unsupported" in space.convert(str(p), "mjcf")["error"]
+    assert "Unknown target" in space.convert(str(EXAMPLES / "arm.urdf"), "../x")["error"]
+
+
+def test_an_odd_file_name_never_reaches_the_output_path():
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "my robot; rm -rf $HOME.urdf"
+        p.write_text((EXAMPLES / "arm.urdf").read_text())
+        r = space.convert(str(p), "mjcf")
+        assert r["error"] is None, r["error"]
+        assert Path(r["output"]).name == "my_robot__rm_-rf__HOME.xml", r["output"]
+
+
 def test_no_file_is_an_error():
     assert space.scan(None)["error"]
     assert space.convert(None, "mjcf")["error"]

@@ -6,6 +6,7 @@ nothing an upload holds is kept.
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -40,13 +41,25 @@ def _sweep(older_than=600):
             shutil.rmtree(d, ignore_errors=True)
 
 
+ALLOWED = {".urdf", ".xml", ".usd", ".usda", ".usdc"}
+
+
 def _check(path):
     if not path:
         return "Choose a file first."
     p = Path(path)
+    if not p.is_file():
+        return "Choose a file first."
+    if p.suffix.lower() not in ALLOWED:
+        return f"Unsupported file type {p.suffix or '(none)'}: use .urdf, .xml, .usd, .usda or .usdc."
     if p.stat().st_size > MAX_BYTES:
         return f"{p.name} is too large: the limit is {MAX_BYTES // (1024 * 1024)} MB."
     return None
+
+
+def _stem(path):
+    """A file name stem that is safe to use in a path: nothing but letters, digits, dot, dash, underscore."""
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", Path(path).stem)[:64] or "robot"
 
 
 def _run(args, cwd):
@@ -57,9 +70,9 @@ def _run(args, cwd):
 
 
 def _staged(path, work):
-    # A copy under its own name: the CLI picks the format from the extension and a Gradio
-    # upload is named by a temporary path.
-    dest = Path(work) / Path(path).name
+    # A copy under a name made here: the CLI picks the format from the extension, and the
+    # uploaded name never reaches a command line or a path.
+    dest = Path(work) / f"{_stem(path)}{Path(path).suffix.lower()}"
     shutil.copyfile(path, dest)
     return dest
 
@@ -91,6 +104,8 @@ def scan(path):
 def convert(path, to):
     """The converted text and what was lost: {error, text, output, losses, report, summary}."""
     empty = {"text": None, "output": None, "losses": [], "report": None, "summary": ""}
+    if to not in EXTENSION:
+        return {**empty, "error": f"Unknown target format {to!r}."}
     problem = _check(path)
     if problem:
         return {**empty, "error": problem}
@@ -98,7 +113,7 @@ def convert(path, to):
         source = _staged(path, work)
         _sweep()
         # Kept for the download after the temporary directory is gone.
-        out = Path(tempfile.mkdtemp(prefix="rigscan-out-")) / f"{source.stem}.{EXTENSION[to]}"
+        out = Path(tempfile.mkdtemp(prefix="rigscan-out-")) / f"{_stem(path)}.{EXTENSION[to]}"
         report = out.with_suffix(".loss.json")
         run = _run([binary(), "convert", str(source), "--to", to, "-o", str(out),
                     "--loss-report", str(report)], work)

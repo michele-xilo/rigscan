@@ -411,3 +411,44 @@ fn a_file_that_was_not_provided_is_an_error() {
     let v = convert("nope.urdf", &[], "mjcf");
     assert!(v["error"].as_str().unwrap().contains("not provided"), "{v}");
 }
+
+#[test]
+fn every_kind_of_loss_is_described() {
+    // A source element the model has no field for (a reader loss), a rewritten name (changed)
+    // and a made-up effort (invented).
+    let urdf = HEALTHY
+        .replace("<link name=\"base\">", "<link name=\"1st\">")
+        .replace("parent link=\"base\"", "parent link=\"1st\"");
+    let usd = convert("arm.urdf", &[("arm.urdf", &urdf)], "usd");
+    let kinds: Vec<&str> = usd["lost"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| l["kind"].as_str().unwrap())
+        .collect();
+    assert!(kinds.contains(&"changed"), "{usd}");
+
+    let mjcf = r#"<mujoco model="m"><worldbody><body name="a"><inertial pos="0 0 0" mass="1" diaginertia="1 1 1"/>
+      <body name="b"><inertial pos="0 0 0" mass="1" diaginertia="1 1 1"/><joint name="j" type="hinge" range="-1 1"/></body>
+      </body></worldbody><actuator><motor joint="j"/></actuator></mujoco>"#;
+    let out = convert("m.xml", &[("m.xml", mjcf)], "urdf");
+    let kinds: Vec<&str> = out["lost"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| l["kind"].as_str().unwrap())
+        .collect();
+    assert!(kinds.contains(&"invented"), "{out}");
+    let described: Vec<&str> = out["lost"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| l["summary"].as_str().unwrap())
+        .collect();
+    assert!(
+        described
+            .iter()
+            .any(|s| s.contains("neutral model has no field")),
+        "{out}"
+    );
+}

@@ -100,6 +100,11 @@ def test_an_odd_file_name_never_reaches_the_output_path():
         assert Path(r["output"]).name == "my_robot__rm_-rf__HOME.xml", r["output"]
 
 
+def test_a_path_outside_the_upload_and_example_folders_is_refused():
+    assert "Choose a file" in space.scan("/etc/hosts")["error"]
+    assert "Choose a file" in space.convert("/etc/hosts", "mjcf")["error"]
+
+
 def test_no_file_is_an_error():
     assert space.scan(None)["error"]
     assert space.convert(None, "mjcf")["error"]

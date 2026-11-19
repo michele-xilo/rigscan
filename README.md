@@ -38,7 +38,7 @@ The [viewer](https://michele-xilo.github.io/rigscan/) runs Rigscan as WebAssembl
 folder) and see the robot in 3D (primitives and STL or OBJ meshes), the kinematic tree coloured by health, the findings, and the source line each one
 points at, and convert it to URDF, MJCF or USD with the list of what the conversion lost. Nothing is uploaded. It is also the test of the WebAssembly build.
 
-The same scan and conversion run as a Gradio app on a Hugging Face Space (`space/`). Each release updates the viewer and the Space together; see [docs/release.md](docs/release.md).
+The same scan and conversion run as a Gradio app on the [Hugging Face Space](https://huggingface.co/spaces/michele-xilo/rigscan) (`space/`). Each release updates the viewer and the Space together; see [docs/release.md](docs/release.md).
 
 ## What it catches
 

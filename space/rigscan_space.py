@@ -44,10 +44,20 @@ def _sweep(older_than=600):
 ALLOWED = {".urdf", ".xml", ".usd", ".usda", ".usdc"}
 
 
+# Where an uploaded file can be: Gradio keeps uploads and examples in the temp directory. A path
+# anywhere else is not one of ours, whatever it points at.
+ROOTS = [os.path.realpath(tempfile.gettempdir()), str(HERE), str(HERE.parent / "examples")]
+
+
+def _resolve(path):
+    real = os.path.realpath(path) if path else ""
+    return real if any(real.startswith(root + os.sep) for root in ROOTS) else ""
+
+
 def _check(path):
-    if not path:
+    if not path or not _resolve(path):
         return "Choose a file first."
-    p = Path(path)
+    p = Path(_resolve(path))
     if not p.is_file():
         return "Choose a file first."
     if p.suffix.lower() not in ALLOWED:
@@ -73,7 +83,7 @@ def _staged(path, work):
     # A copy under a name made here: the CLI picks the format from the extension, and the
     # uploaded name never reaches a command line or a path.
     dest = Path(work) / f"{_stem(path)}{Path(path).suffix.lower()}"
-    shutil.copyfile(path, dest)
+    shutil.copyfile(_resolve(path), dest)
     return dest
 
 

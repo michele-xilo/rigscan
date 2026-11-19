@@ -20,8 +20,11 @@ Both show the version they were built from.
 
 - Pages: Settings, Pages, source "GitHub Actions". The `github-pages` environment must allow deployments from the
   release tags (a `v*` tag rule), not only from `main`.
-- Space: create a Gradio Space on Hugging Face, then set the repository variable `HF_SPACE` (`owner/name`) and the
-  repository secret `HF_TOKEN` (a token with write access to that Space). The token lives only in the secret.
+- Space: set the repository variable `HF_SPACE` (`owner/name`, the account or organisation must exist) and the
+  repository secret `HF_TOKEN` (a token that can create and write Spaces: a fine-grained token with write access
+  to that namespace, or a classic write token). The token lives only in the secret. The workflow creates the Space
+  (Gradio SDK) if it does not exist, so the first deploy needs no manual push: run the `Release` workflow from the
+  Actions tab, or publish the first release.
 
 ## Checking the Space locally
 

@@ -85,6 +85,7 @@ jobs:
           from huggingface_hub import HfApi
           api = HfApi(token=os.environ["HF_TOKEN"])
           space = os.environ["HF_SPACE"]
+          api.create_repo(space, repo_type="space", space_sdk="gradio", exist_ok=True)
           api.upload_folder(folder_path="space-build", repo_id=space, repo_type="space",
                             commit_message=f"Release v{os.environ['VERSION']}")
           PY

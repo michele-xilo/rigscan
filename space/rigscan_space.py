@@ -24,8 +24,19 @@ EXTENSION = {"urdf": "urdf", "mjcf": "xml", "usd": "usda"}
 def binary():
     for candidate in (os.environ.get("RIGSCAN_BIN"), HERE / "rigscan", shutil.which("rigscan")):
         if candidate and Path(candidate).is_file():
-            return str(candidate)
+            return _executable(str(candidate))
     raise FileNotFoundError("the rigscan binary was not found")
+
+
+def _executable(path):
+    """The path, or a runnable copy of it: a Hugging Face upload does not keep the executable bit."""
+    if os.access(path, os.X_OK):
+        return path
+    copy = Path(tempfile.gettempdir()) / "rigscan-bin"
+    if not copy.exists() or copy.stat().st_size != Path(path).stat().st_size:
+        shutil.copyfile(path, copy)
+    copy.chmod(0o755)
+    return str(copy)
 
 
 def version():

@@ -380,7 +380,7 @@ fn each_kind_of_loss_gets_its_meaning_and_a_total() {
     let err = stderr(&out);
     assert!(
         err.contains(
-            "lost limit/effort: shoulder\n  MJCF has no effort limit on a joint; it was left out.\n"
+            "lost limit/effort: shoulder\n  The target has no effort limit on this joint (MJCF has none, USD holds one only as a positive drive force); it was left out.\n"
         ),
         "{err}"
     );
@@ -544,4 +544,66 @@ fn a_rewritten_value_is_marked_as_changed() {
     let r = json(&root.join("loss.json"));
     assert_eq!(r["lost"][0]["id"], "inertial/frame");
     assert_eq!(r["lost"][0]["kind"], "changed");
+}
+
+#[test]
+fn urdf_converts_to_usd_and_lists_what_it_lost() {
+    let root = tree("usd", &[("arm.urdf", WITH_EFFORT)]);
+    let out = convert(&root, &["arm.urdf", "--to", "usd", "-o", "arm.usda"]);
+
+    assert_eq!(out.status.code(), Some(1), "{}", stderr(&out));
+    let written = fs::read_to_string(root.join("arm.usda")).unwrap();
+    assert!(written.starts_with("#usda 1.0"), "{written}");
+    assert!(stderr(&out).contains("limit/velocity"), "{}", stderr(&out));
+    let back = convert(&root, &["arm.usda", "--to", "urdf"]);
+    assert!(
+        back.status.code().is_some_and(|c| c < 2),
+        "{}",
+        stderr(&back)
+    );
+    assert!(
+        stdout(&back).contains("<joint name=\"/arm/joints/shoulder\""),
+        "{}",
+        stdout(&back)
+    );
+}
+
+#[test]
+fn usd_in_and_usd_out_is_an_error() {
+    let root = tree("usd-same", &[("arm.urdf", ARM)]);
+    convert(&root, &["arm.urdf", "--to", "usd", "-o", "arm.usda"]);
+    let out = convert(&root, &["arm.usda", "--to", "usd"]);
+
+    assert_eq!(out.status.code(), Some(2));
+    assert!(stderr(&out).contains("already USD"), "{}", stderr(&out));
+}
+
+#[test]
+fn urdf_corpus_converts_to_usd_and_back() {
+    let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/example-robot-data");
+    if !corpus.exists() && std::env::var_os("RIGSCAN_REQUIRE_CORPUS").is_none() {
+        eprintln!("skipped: corpus/example-robot-data is not present");
+        return;
+    }
+    let root = tree("corpus-usd", &[]);
+    let mut converted = 0;
+    for entry in ignore::Walk::new(&corpus).flatten() {
+        let p = entry.path();
+        if p.extension().is_none_or(|e| e != "urdf") {
+            continue;
+        }
+        let out = convert(&root, &[p.to_str().unwrap(), "--to", "usd", "-o", "b.usda"]);
+        if out.status.code() == Some(2) {
+            continue;
+        }
+        let back = convert(&root, &["b.usda", "--to", "urdf"]);
+        assert!(
+            back.status.code().is_some_and(|c| c < 2) || stderr(&back).contains("not converted"),
+            "{}: {}",
+            p.display(),
+            stderr(&back).lines().next().unwrap_or("")
+        );
+        converted += 1;
+    }
+    assert!(converted > 0, "no corpus file converted");
 }

@@ -7,7 +7,7 @@ use output::Scanned;
 use rayon::prelude::*;
 use rigscan_core::{
     lint_mjcf, lint_usd, lint_with, parse_mjcf, parse_urdf, parse_usd, write_mjcf, write_urdf,
-    Format, Geometry, Robot, Severity,
+    write_usd, Format, Geometry, Robot, Severity,
 };
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -47,6 +47,7 @@ enum ColorChoice {
 enum Target {
     Urdf,
     Mjcf,
+    Usd,
 }
 
 #[derive(Subcommand)]
@@ -116,6 +117,7 @@ fn convert(
     let (target, name) = match to {
         Target::Urdf => (Format::Urdf, "URDF"),
         Target::Mjcf => (Format::Mjcf, "MJCF"),
+        Target::Usd => (Format::Usd, "USD"),
     };
     if scanned.format == target {
         return refuse(format!("{}: already {name}", input.display()));
@@ -142,6 +144,7 @@ fn convert(
     let converted = match to {
         Target::Urdf => write_urdf(&robot),
         Target::Mjcf => write_mjcf(&robot),
+        Target::Usd => write_usd(&robot),
     };
     let written = match output {
         Some(path) => {

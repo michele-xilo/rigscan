@@ -480,3 +480,81 @@ fn a_joint_to_a_missing_link_is_reported_and_not_written() {
     assert_eq!(ids(&out, "joint/undefined"), ["j"]);
     assert!(!out.text.contains("\"j\""), "{}", out.text);
 }
+
+const TENSORS: [&str; 6] = [
+    "ixx=\"2\" ixy=\"0.3\" ixz=\"0.1\" iyy=\"3\" iyz=\"0.2\" izz=\"4\"",
+    "ixx=\"4\" ixy=\"-0.3\" ixz=\"0.1\" iyy=\"3\" iyz=\"0.2\" izz=\"2\"",
+    "ixx=\"3\" ixy=\"0.5\" ixz=\"-0.4\" iyy=\"2\" iyz=\"0.3\" izz=\"4\"",
+    "ixx=\"2\" ixy=\"0.1\" ixz=\"0.1\" iyy=\"2.5\" iyz=\"-0.2\" izz=\"3\"",
+    "ixx=\"5\" ixy=\"1\" ixz=\"0\" iyy=\"3\" iyz=\"0\" izz=\"4\"",
+    "ixx=\"3\" ixy=\"0\" ixz=\"1\" iyy=\"5\" iyz=\"1\" izz=\"4\"",
+];
+
+#[test]
+fn a_full_inertia_tensor_of_any_handedness_round_trips() {
+    for (i, tensor) in TENSORS.iter().enumerate() {
+        let robot = parse_urdf(&format!(
+            r#"<robot name="t"><link name="a"><inertial><mass value="1"/><inertia {tensor}/></inertial></link></robot>"#
+        ))
+        .unwrap();
+        round_trip(&format!("tensor {i}"), &robot);
+    }
+}
+
+#[test]
+fn an_axis_pointing_down_x_and_a_zero_axis_still_round_trip() {
+    for axis in ["-1 0 0", "0 0 0"] {
+        let robot = parse_urdf(&format!(
+            r#"<robot name="x"><link name="a"/><link name="b"/>
+  <joint name="j" type="revolute"><parent link="a"/><child link="b"/><axis xyz="{axis}"/>
+  <limit lower="-1" upper="1" effort="1" velocity="1"/></joint></robot>"#
+        ))
+        .unwrap();
+        write_usd(&robot);
+        if axis != "0 0 0" {
+            round_trip(axis, &robot);
+        }
+    }
+}
+
+#[test]
+fn ball_and_unknown_joints_and_unlimited_kinds_are_written_or_reported() {
+    let ball = mjcf(
+        r#"<mujoco model="b"><worldbody><body name="a"><inertial pos="0 0 0" mass="1" diaginertia="1 1 1"/>
+  <body name="c"><inertial pos="0 0 0" mass="1" diaginertia="1 1 1"/><joint name="s" type="ball"/></body>
+  </body></worldbody></mujoco>"#,
+    );
+    let out = write_usd(&ball);
+    assert!(
+        out.text.contains("def PhysicsSphericalJoint \"s\""),
+        "{}",
+        out.text
+    );
+
+    let mut weird = parse_urdf(
+        r#"<robot name="w"><link name="a"/><link name="b"/>
+  <joint name="j" type="fixed"><parent link="a"/><child link="b"/></joint></robot>"#,
+    )
+    .unwrap();
+    weird.joints[0].kind = JointKind::Other("gear".into());
+    assert_eq!(ids(&write_usd(&weird), "joint/gear"), ["j"]);
+
+    let bounded = parse_urdf(
+        r#"<robot name="c"><link name="a"/><link name="b"/>
+  <joint name="j" type="continuous"><parent link="a"/><child link="b"/>
+  <limit lower="-1" upper="1" effort="1" velocity="1"/></joint></robot>"#,
+    )
+    .unwrap();
+    assert_eq!(ids(&write_usd(&bounded), "limit"), ["j"]);
+}
+
+#[test]
+fn a_revolute_joint_with_no_limit_at_all_is_reported() {
+    let mut robot = parse_urdf(
+        r#"<robot name="n"><link name="a"/><link name="b"/>
+  <joint name="j" type="continuous"><parent link="a"/><child link="b"/></joint></robot>"#,
+    )
+    .unwrap();
+    robot.joints[0].kind = JointKind::Revolute;
+    assert_eq!(ids(&write_usd(&robot), "limit"), ["j"]);
+}

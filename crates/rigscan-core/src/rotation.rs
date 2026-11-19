@@ -91,18 +91,6 @@ pub(crate) fn symmetric_eigen(mut a: Mat) -> ([f64; 3], Mat) {
         a = mul(&transpose(&turn), &mul(&a, &turn));
         v = mul(&v, &turn);
     }
-    // Turning a column's sign never changes an eigenvector, but a rotation has determinant +1.
-    let det = (0..3)
-        .map(|j| {
-            v[0][j]
-                * (v[1][(j + 1) % 3] * v[2][(j + 2) % 3] - v[1][(j + 2) % 3] * v[2][(j + 1) % 3])
-        })
-        .sum::<f64>();
-    if det < 0.0 {
-        for row in &mut v {
-            row[2] = -row[2];
-        }
-    }
     ([a[0][0], a[1][1], a[2][2]], v)
 }
 
@@ -207,4 +195,48 @@ pub(crate) fn rpy(r: &Mat) -> [f64; 3] {
         return [0.0, pitch, (-r[0][1]).atan2(r[1][1])];
     }
     [r[2][1].atan2(r[2][2]), pitch, r[1][0].atan2(r[0][0])]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn det(m: &Mat) -> f64 {
+        m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+            - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+    }
+
+    #[test]
+    fn align_x_keeps_x_and_turns_minus_x_half_way_round() {
+        assert_eq!(align_x([1.0, 0.0, 0.0]), IDENTITY);
+        let flipped = apply(&align_x([-1.0, 0.0, 0.0]), [1.0, 0.0, 0.0]);
+        assert!((flipped[0] + 1.0).abs() < 1e-12 && flipped[1].abs() < 1e-12);
+    }
+
+    #[test]
+    fn eigenvectors_are_always_a_proper_rotation_of_the_tensor() {
+        for k in 0..40 {
+            let (a, b, c) = (
+                1.0 + k as f64 * 0.37 % 3.0,
+                0.1 * (k % 7) as f64,
+                0.2 * (k % 5) as f64,
+            );
+            let m = [[a + 2.0, b, -c], [b, a + 1.0, c], [-c, c, a + 3.0]];
+            let (d, v) = symmetric_eigen(m);
+            assert!((det(&v) - 1.0).abs() < 1e-9, "{m:?}");
+            let back = mul(
+                &v,
+                &mul(
+                    &[[d[0], 0.0, 0.0], [0.0, d[1], 0.0], [0.0, 0.0, d[2]]],
+                    &transpose(&v),
+                ),
+            );
+            for i in 0..3 {
+                for j in 0..3 {
+                    assert!((back[i][j] - m[i][j]).abs() < 1e-9, "{m:?}");
+                }
+            }
+        }
+    }
 }

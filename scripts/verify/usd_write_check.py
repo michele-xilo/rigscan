@@ -68,8 +68,8 @@ def compare(np, mujoco, pxr, usd_path, model):
             bodies[p.GetName()] = p
     first = None
     for b in range(1, model.nbody):
-        name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, b)
-        p = bodies.get(identifier(name or ""))
+        label = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, b) or ""
+        p = bodies.get(identifier(label))
         if p is None:
             continue
         x = UsdGeom.Xformable(p).ComputeLocalToWorldTransform(0)
@@ -82,10 +82,10 @@ def compare(np, mujoco, pxr, usd_path, model):
         want = mr.T @ (d.xpos[b] - mp)
         have = ur.T @ (pos - up)
         if np.abs(want - have).max() > POSE:
-            return f"{name}: position off by {np.abs(want - have).max():.4g}"
+            return f"body {label}: position off by {np.abs(want - have).max():.4g}"
         mass = UsdPhysics.MassAPI(p).GetMassAttr().Get()
         if mass is not None and abs(mass - model.body_mass[b]) > MASS * max(1.0, model.body_mass[b]):
-            return f"{name}: mass {mass} against {model.body_mass[b]}"
+            return f"body {label}: mass {mass} against {model.body_mass[b]}"
     return None
 
 

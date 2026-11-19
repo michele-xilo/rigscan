@@ -462,17 +462,9 @@ fn poses<'a>(robot: &'a Robot, bodies: &[&'a Link]) -> HashMap<&'a str, Pose> {
         let mut chain = Vec::new();
         let mut at = l.name.as_str();
         while !poses.contains_key(at) && chain.len() <= robot.links.len() {
-            match first.get(at) {
-                Some(j) if j.parent != WORLD || robot.links.iter().any(|x| x.name == WORLD) => {
-                    chain.push(*j);
-                    at = j.parent.as_str();
-                }
-                Some(j) => {
-                    chain.push(*j);
-                    break;
-                }
-                None => break,
-            }
+            let Some(j) = first.get(at) else { break };
+            chain.push(*j);
+            at = j.parent.as_str();
         }
         // Applied from the top of the chain down.
         let mut pose = poses.get(at).copied().unwrap_or(Pose::IDENTITY);

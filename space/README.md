@@ -7,7 +7,7 @@ sdk: gradio
 app_file: app.py
 pinned: false
 license: apache-2.0
-short_description: Health check and format conversion for URDF, MJCF and USD robots
+short_description: Health check and conversion for URDF, MJCF and USD robots
 ---
 
 Rigscan scans URDF, MJCF and USD robot descriptions for broken links, inverted limits and missing

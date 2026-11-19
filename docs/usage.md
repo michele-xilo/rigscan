@@ -84,7 +84,7 @@ reach the files; paths with a scheme such as `package://` and absolute paths are
 |---|---|---|
 | URDF | links, joints, types, origins, axes, limits, dynamics, mimic, inertials, geometry (box, sphere, cylinder, mesh) | RS001-RS015 |
 | MJCF | element tree with `include`s and `default` classes applied; bodies, joints, geoms (primitives and meshes), inertials, orientation | RS001-RS018 |
-| USD (UsdPhysics) | rigid bodies, joints, mass, centre of mass, joint axes and limits, composed from references, payloads and sublayers; `.usda` and `.usdc` | RS008-RS012, RS019-RS022 |
+| USD (UsdPhysics) | rigid bodies, joints with the frames on both bodies, mass, centre of mass, principal axes, joint axes, limits and drive `maxForce`, composed from references, payloads and sublayers; `.usda` and `.usdc` | RS008-RS012, RS019-RS022 |
 
 What a model cannot hold (actuators, tendons, materials, USD collision meshes and so on) is kept in the robot's
 `unmapped` list, which the conversion loss report will use.

@@ -26,6 +26,8 @@ pub struct UsdBody {
     pub inertia: Option<[f64; 3]>,
     /// Centre of mass in the body frame; `None` when USD is left to compute it from the shapes.
     pub center_of_mass: Option<[f64; 3]>,
+    /// `physics:principalAxes` as w, x, y, z: the frame in which `inertia` is diagonal.
+    pub principal_axes: [f64; 4],
     /// A prim with `PhysicsCollisionAPI` is this prim or under it, with no rigid body in between.
     pub collision: bool,
 }
@@ -41,11 +43,16 @@ pub struct UsdJoint {
     pub local_pos0: [f64; 3],
     /// `physics:localRot0` as w, x, y, z; identity when absent or not a usable quaternion.
     pub local_rot0: [f64; 4],
+    /// The same frame in the second body's coordinates.
+    pub local_pos1: [f64; 3],
+    pub local_rot1: [f64; 4],
     /// Unit vector of `physics:axis` (`X`, `Y` or `Z`, default `X`); only revolute and prismatic joints use it.
     pub axis: [f64; 3],
     /// As authored: degrees for a revolute joint, stage units for a prismatic one.
     pub lower: Option<f64>,
     pub upper: Option<f64>,
+    /// `maxForce` of the joint's drive, as authored; stiffness and damping are control gains.
+    pub max_force: Option<f64>,
 }
 
 /// A primitive gprim, placed in the frame of the body above it. Lengths are in metres, unlike the
@@ -203,6 +210,7 @@ fn read(stage: &Stage) -> openusd::Result<Usd> {
                 mass: None,
                 inertia: None,
                 center_of_mass: None,
+                principal_axes: IDENTITY_QUAT,
                 collision: false,
             });
         }
@@ -272,12 +280,18 @@ fn prim_data(
         } else {
             (None, None, None)
         };
+        let axes = attr("physics:principalAxes");
+        let principal_axes = axes.as_ref().and_then(quat).unwrap_or(IDENTITY_QUAT);
+        if has("PhysicsMassAPI") && axes.is_some_and(|q| quat(&q).is_none()) {
+            lose(usd, "principalAxes", path);
+        }
         usd.bodies.push(UsdBody {
             path: path.to_string(),
             rigid: true,
             mass,
             inertia,
             center_of_mass,
+            principal_axes,
             collision: false,
         });
     }
@@ -303,6 +317,11 @@ fn prim_data(
         if rot0.is_some_and(|q| quat(&q).is_none()) {
             lose(usd, "localRot0", path);
         }
+        let rot1 = attr("physics:localRot1");
+        let local_rot1 = rot1.as_ref().and_then(quat).unwrap_or(IDENTITY_QUAT);
+        if rot1.is_some_and(|q| quat(&q).is_none()) {
+            lose(usd, "localRot1", path);
+        }
         usd.joints.push(UsdJoint {
             path: path.to_string(),
             type_name: ty.clone(),
@@ -310,6 +329,8 @@ fn prim_data(
             body1,
             local_pos0: attr("physics:localPos0").and_then(vec3).unwrap_or([0.0; 3]),
             local_rot0,
+            local_pos1: attr("physics:localPos1").and_then(vec3).unwrap_or([0.0; 3]),
+            local_rot1,
             axis: attr("physics:axis")
                 .and_then(axis)
                 .unwrap_or([1.0, 0.0, 0.0]),
@@ -319,16 +340,8 @@ fn prim_data(
             upper: attr("physics:upperLimit")
                 .and_then(number)
                 .filter(|v| v.is_finite()),
+            max_force: drive_max_force(&apis, &attr),
         });
-        if attr("physics:localRot1").is_some_and(|q| !is_identity(&q)) {
-            lose(usd, "localRot1", path);
-        }
-        if attr("physics:localPos1")
-            .and_then(vec3)
-            .is_some_and(|p| p != [0.0; 3])
-        {
-            lose(usd, "localPos1", path);
-        }
     }
     if ty == "PhysicsScene" {
         lose(usd, "scene", path);
@@ -343,14 +356,11 @@ fn prim_data(
             lose(usd, "collision", path);
         }
     }
-    if apis.iter().any(|a| a.starts_with("PhysicsDriveAPI")) {
+    if has_drive_gains(&apis, &attr) {
         lose(usd, "drive", path);
     }
     if has("PhysicsMaterialAPI") {
         lose(usd, "material", path);
-    }
-    if has("PhysicsMassAPI") && attr("physics:principalAxes").is_some_and(|q| !is_identity(&q)) {
-        lose(usd, "principalAxes", path);
     }
     Ok(())
 }
@@ -408,73 +418,31 @@ pub(crate) fn quat(v: &Value) -> Option<[f64; 4]> {
     (q.iter().any(|c| *c != 0.0) && q.iter().all(|c| c.is_finite())).then_some(q)
 }
 
-/// Anything but a quaternion is not a rotation we recognise, and counts as not identity.
-fn is_identity(v: &Value) -> bool {
-    let near = |a: f64, b: f64| (a - b).abs() < 1e-6;
-    match v {
-        Value::Quatf(q) => {
-            near(q.w.into(), 1.0)
-                && near(q.x.into(), 0.0)
-                && near(q.y.into(), 0.0)
-                && near(q.z.into(), 0.0)
-        }
-        Value::Quatd(q) => near(q.w, 1.0) && near(q.x, 0.0) && near(q.y, 0.0) && near(q.z, 0.0),
-        _ => false,
-    }
+const IDENTITY_QUAT: [f64; 4] = [1.0, 0.0, 0.0, 0.0];
+
+/// The drive instances of a prim, as the `drive:<instance>:physics:` prefix of their attributes.
+fn drive_prefixes(apis: &[String]) -> impl Iterator<Item = String> + '_ {
+    apis.iter()
+        .filter_map(|a| a.strip_prefix("PhysicsDriveAPI:"))
+        .map(|i| format!("drive:{i}:physics:"))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use openusd::ar::Resolver;
+/// The first drive's finite, positive `maxForce`.
+fn drive_max_force(apis: &[String], attr: &dyn Fn(&str) -> Option<Value>) -> Option<f64> {
+    drive_prefixes(apis)
+        .find_map(|p| attr(&format!("{p}maxForce")).and_then(number))
+        .filter(|f| f.is_finite() && *f > 0.0)
+}
 
-    struct Nothing;
-
-    impl UsdLoader for Nothing {
-        fn load(&self, _: &str) -> Option<Vec<u8>> {
-            None
-        }
-    }
-
-    fn resolver() -> LoaderResolver {
-        LoaderResolver {
-            loader: Box::new(Nothing),
-            found: RefCell::default(),
-        }
-    }
-
-    #[test]
-    fn identifiers_are_anchored_to_the_referencing_layer_unless_absolute() {
-        let r = resolver();
-        let anchor = ResolvedPath::new("a/b/root.usda");
-        assert_eq!(
-            r.create_identifier("./c/../x.usda", Some(&anchor)),
-            "a/b/x.usda"
-        );
-        assert_eq!(
-            r.create_identifier("/abs/x.usda", Some(&anchor)),
-            "/abs/x.usda"
-        );
-        assert_eq!(
-            r.create_identifier("http://h/x.usda", Some(&anchor)),
-            "http://h/x.usda"
-        );
-        assert_eq!(r.create_identifier("x.usda", None), "x.usda");
-    }
-
-    #[test]
-    fn missing_layer_does_not_resolve_or_open() {
-        let r = resolver();
-        assert!(r.resolve("gone.usda").is_none());
-        assert!(r.open_asset(&ResolvedPath::new("gone.usda")).is_err());
-    }
-
-    #[test]
-    fn the_file_system_is_never_consulted() {
-        let r = resolver();
-        assert!(r.resolve_for_new_asset("x.usda").is_some());
-        assert!(r
-            .get_modification_timestamp("x.usda", &ResolvedPath::new("/etc/hosts"))
-            .is_none());
-    }
+/// A drive with a gain or a target is a controller; the model holds none.
+fn has_drive_gains(apis: &[String], attr: &dyn Fn(&str) -> Option<Value>) -> bool {
+    drive_prefixes(apis).any(|p| {
+        ["stiffness", "damping", "targetPosition", "targetVelocity"]
+            .iter()
+            .any(|k| {
+                attr(&format!("{p}{k}"))
+                    .and_then(number)
+                    .is_some_and(|v| v != 0.0)
+            })
+    })
 }

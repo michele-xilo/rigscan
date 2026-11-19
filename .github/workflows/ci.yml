@@ -34,9 +34,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: pip install mujoco
+      - run: pip install mujoco usd-core
       - run: scripts/fetch-corpus.sh
       - run: scripts/fetch-mjcf-corpus.sh
+      - run: scripts/fetch-usd-corpus.sh
       - run: cargo build -p rigscan-cli
       - run: python3 scripts/verify/mujoco_load.py --require
       - run: python3 scripts/verify/mujoco_compare.py --require
+      - run: python3 scripts/verify/usd_compare.py --require

@@ -223,7 +223,10 @@ fn what_the_model_cannot_hold_is_listed_without_a_position() {
     let r = robot(
         r#"#usda 1.0
 def PhysicsScene "scene" {}
-def Xform "b" (prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsCollisionAPI", "PhysicsDriveAPI:angular"]) {}
+def Xform "b" (prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsCollisionAPI", "PhysicsDriveAPI:angular"])
+{
+    float drive:angular:physics:damping = 5
+}
 "#,
     );
     let what: Vec<&str> = r.unmapped.iter().map(|u| u.what.as_str()).collect();
@@ -331,7 +334,7 @@ fn nested_references_resolve_against_the_layer_that_makes_them() {
 }
 
 #[test]
-fn rotations_the_model_cannot_hold_are_listed_unless_identity() {
+fn only_what_the_model_cannot_hold_is_listed() {
     let r = robot(
         r#"#usda 1.0
 def Xform "a" (prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysicsMaterialAPI"])
@@ -359,7 +362,7 @@ def PhysicsFixedJoint "j"
         .map(|u| (u.what.as_str(), u.name.as_deref().unwrap()))
         .collect();
     what.sort();
-    assert_eq!(what, [("material", "/a"), ("principalAxes", "/a")]);
+    assert_eq!(what, [("material", "/a")]);
     let half_pi = std::f64::consts::FRAC_PI_2;
     assert!(
         near(r.joints[0].origin.rpy[0], half_pi),
@@ -405,10 +408,35 @@ fn a_zero_local_rot0_is_listed_as_lost() {
 }
 
 #[test]
-fn a_turned_local_rot1_is_still_listed_as_lost() {
+fn a_turned_local_rot1_turns_the_child_and_is_not_lost() {
     let r = rot_joint("", "quatf physics:localRot1 = (0.7071068, 0.7071068, 0, 0)");
+    assert!(near(
+        r.joints[0].origin.rpy[0],
+        -std::f64::consts::FRAC_PI_2
+    ));
+    assert!(r.unmapped.is_empty(), "{:?}", r.unmapped);
+}
+
+#[test]
+fn a_zero_local_rot1_is_listed_as_lost() {
+    let r = rot_joint("", "quatf physics:localRot1 = (0, 0, 0, 0)");
     let what: Vec<&str> = r.unmapped.iter().map(|u| u.what.as_str()).collect();
     assert_eq!(what, ["localRot1"]);
+}
+
+#[test]
+fn a_zero_principal_axes_is_listed_as_lost() {
+    let r = robot(
+        r#"#usda 1.0
+def Xform "a" (prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"])
+{
+    float3 physics:diagonalInertia = (1, 1, 1)
+    quatf physics:principalAxes = (0, 0, 0, 0)
+}
+"#,
+    );
+    let what: Vec<&str> = r.unmapped.iter().map(|u| u.what.as_str()).collect();
+    assert_eq!(what, ["principalAxes"]);
 }
 
 #[test]
@@ -645,27 +673,17 @@ fn a_y_up_stage_is_listed_as_lost_and_a_z_up_stage_is_not() {
 }
 
 #[test]
-fn a_local_pos1_is_listed_as_lost_unless_zero() {
-    let lost = |pos1: &str| {
-        robot(&format!(
-            r#"#usda 1.0
-def Xform "a" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {{}}
-def Xform "b" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {{}}
-def PhysicsFixedJoint "j"
-{{
+fn a_local_pos1_moves_the_child_back_and_is_not_lost() {
+    let r = two_bodies(
+        r#"def PhysicsFixedJoint "j"
+{
     rel physics:body0 = </a>
     rel physics:body1 = </b>
-    point3f physics:localPos1 = {pos1}
-}}
-"#
-        ))
-        .unmapped
-        .iter()
-        .map(|u| u.what.clone())
-        .collect::<Vec<_>>()
-    };
-    assert_eq!(lost("(0, 0, 0.2)"), ["localPos1"]);
-    assert!(lost("(0, 0, 0)").is_empty());
+    point3f physics:localPos1 = (0, 0, 0.2)
+}"#,
+    );
+    assert!(near(r.joints[0].origin.xyz[2], -0.2), "{:?}", r.joints[0]);
+    assert!(r.unmapped.is_empty(), "{:?}", r.unmapped);
 }
 
 fn shapes_of(body_children: &str) -> Robot {
@@ -1054,4 +1072,142 @@ def Cube "floor" (prepend apiSchemas = ["PhysicsCollisionAPI"]) {}
 "#,
     );
     assert_eq!(lost_collisions(&loose), 1);
+}
+
+fn two_bodies(joint: &str) -> Robot {
+    robot(&format!(
+        r#"#usda 1.0
+def Xform "a" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {{}}
+def Xform "b" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {{}}
+{joint}
+"#
+    ))
+}
+
+#[test]
+fn the_joint_origin_is_the_parent_frame_times_the_inverse_of_the_child_frame() {
+    // frame0 is the identity at (1, 0, 0) in a; frame1 is turned 90 degrees about z at (0.5, 0, 0)
+    // in b. The child sits at p0 - R1^T p1 = (1, 0.5, 0), turned by R1^T = -90 degrees about z.
+    let r = two_bodies(
+        r#"def PhysicsFixedJoint "j"
+{
+    rel physics:body0 = </a>
+    rel physics:body1 = </b>
+    point3f physics:localPos0 = (1, 0, 0)
+    point3f physics:localPos1 = (0.5, 0, 0)
+    quatf physics:localRot1 = (0.7071068, 0, 0, 0.7071068)
+}"#,
+    );
+    let o = &r.joints[0].origin;
+    assert!(
+        near(o.xyz[0], 1.0) && near(o.xyz[1], 0.5) && near(o.xyz[2], 0.0),
+        "{o:?}"
+    );
+    assert!(near(o.rpy[2], -std::f64::consts::FRAC_PI_2), "{o:?}");
+    assert!(r.unmapped.is_empty(), "{:?}", r.unmapped);
+}
+
+#[test]
+fn the_axis_is_given_in_the_child_frame() {
+    // X in frame1, which is turned 90 degrees about z in b, is y in b.
+    let r = two_bodies(
+        r#"def PhysicsRevoluteJoint "j"
+{
+    rel physics:body0 = </a>
+    rel physics:body1 = </b>
+    token physics:axis = "X"
+    quatf physics:localRot1 = (0.7071068, 0, 0, 0.7071068)
+}"#,
+    );
+    let a = r.joints[0].axis.unwrap();
+    assert!(
+        near(a[0], 0.0) && near(a[1], 1.0) && near(a[2], 0.0),
+        "{a:?}"
+    );
+}
+
+#[test]
+fn principal_axes_turn_the_diagonal_inertia_into_a_full_tensor() {
+    // diag (1, 2, 3) turned 45 degrees about z: ixx = iyy = 1.5, ixy = -0.5.
+    let r = robot(
+        r#"#usda 1.0
+def Xform "a" (prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"])
+{
+    float physics:mass = 1
+    float3 physics:diagonalInertia = (1, 2, 3)
+    quatf physics:principalAxes = (0.9238795, 0, 0, 0.3826834)
+}
+"#,
+    );
+    let t = r.links[0]
+        .inertial
+        .as_ref()
+        .unwrap()
+        .inertia
+        .as_ref()
+        .unwrap();
+    assert!(
+        near(t.ixx, 1.5) && near(t.iyy, 1.5) && near(t.izz, 3.0),
+        "{t:?}"
+    );
+    assert!(
+        near(t.ixy, -0.5) && near(t.ixz, 0.0) && near(t.iyz, 0.0),
+        "{t:?}"
+    );
+    assert!(r.unmapped.is_empty(), "{:?}", r.unmapped);
+}
+
+#[test]
+fn a_drive_max_force_is_the_joint_effort_and_gains_are_still_listed() {
+    let drive = |extra: &str| {
+        two_bodies(&format!(
+            r#"def PhysicsRevoluteJoint "j" (prepend apiSchemas = ["PhysicsDriveAPI:angular"])
+{{
+    rel physics:body0 = </a>
+    rel physics:body1 = </b>
+    float physics:lowerLimit = -90
+    float physics:upperLimit = 90
+    float drive:angular:physics:maxForce = 12
+    {extra}
+}}"#
+        ))
+    };
+    let r = drive("");
+    let l = r.joints[0].limit.as_ref().unwrap();
+    assert!(near(l.effort.unwrap(), 12.0), "{l:?}");
+    assert!(r.unmapped.is_empty(), "{:?}", r.unmapped);
+
+    let r = drive("float drive:angular:physics:stiffness = 100");
+    let what: Vec<&str> = r.unmapped.iter().map(|u| u.what.as_str()).collect();
+    assert_eq!(what, ["drive"]);
+}
+
+#[test]
+fn a_joint_with_only_body0_holds_that_body_to_the_world() {
+    // body1 is empty, so frame1 is in the world: the body sits at p1 - R1 R0^T p0 below it, and a
+    // body is never the parent of the world.
+    let r = robot(
+        r#"#usda 1.0
+def Xform "a" (prepend apiSchemas = ["PhysicsRigidBodyAPI"]) {}
+def PhysicsRevoluteJoint "j"
+{
+    rel physics:body0 = </a>
+    token physics:axis = "X"
+    point3f physics:localPos0 = (0, 0, 0.5)
+    quatf physics:localRot0 = (0.7071068, 0, 0, 0.7071068)
+    point3f physics:localPos1 = (1, 0, 0)
+}
+"#,
+    );
+    let j = &r.joints[0];
+    assert_eq!((j.parent.as_str(), j.child.as_str()), ("world", "/a"));
+    // R1 R0^T = -90 degrees about z; it turns p0 = (0, 0, 0.5) into itself.
+    assert!(
+        near(j.origin.xyz[0], 1.0) && near(j.origin.xyz[2], -0.5),
+        "{j:?}"
+    );
+    assert!(near(j.origin.rpy[2], -std::f64::consts::FRAC_PI_2), "{j:?}");
+    // X in frame0, turned 90 degrees about z in the body, is y in the body.
+    let a = j.axis.unwrap();
+    assert!(near(a[0], 0.0) && near(a[1], 1.0), "{a:?}");
 }

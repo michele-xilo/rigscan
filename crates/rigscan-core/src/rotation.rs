@@ -17,6 +17,14 @@ pub(crate) fn mul(a: &Mat, b: &Mat) -> Mat {
     out
 }
 
+pub(crate) fn transpose(a: &Mat) -> Mat {
+    std::array::from_fn(|i| std::array::from_fn(|j| a[j][i]))
+}
+
+pub(crate) fn apply(a: &Mat, v: [f64; 3]) -> [f64; 3] {
+    std::array::from_fn(|i| (0..3).map(|k| a[i][k] * v[k]).sum())
+}
+
 fn unit(v: [f64; 3]) -> Option<[f64; 3]> {
     let n = v.iter().map(|x| x * x).sum::<f64>().sqrt();
     (n > TINY).then(|| v.map(|x| x / n))

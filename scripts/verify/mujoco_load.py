@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Loads every converted corpus file in MuJoCo and fails on anything but a known cause.
 
-URDF corpus -> MJCF and MuJoCo Menagerie -> URDF, through the built `rigscan` binary. The corpora
-hold no mesh files, so a load that fails only because a file cannot be opened is expected, as is an
+URDF corpus -> MJCF, MuJoCo Menagerie -> URDF and the Newton USD assets -> MJCF and URDF, through
+the built `rigscan` binary. The corpora hold no mesh files, so a load that fails only because a file cannot be opened is expected, as is an
 input the converter refuses for its critical findings. Every other failure is a bug in a writer.
 
     python3 scripts/verify/mujoco_load.py [--require] [--bin target/debug/rigscan]
@@ -21,6 +21,8 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNS = [
     ("example-robot-data", "corpus/example-robot-data/**/*.urdf", "mjcf", ".xml"),
     ("mujoco_menagerie", "corpus/mujoco_menagerie/*/*.xml", "urdf", ".urdf"),
+    ("newton_assets", "corpus/newton_assets/**/*.usd*", "mjcf", ".xml"),
+    ("newton_assets", "corpus/newton_assets/**/*.usd*", "urdf", ".urdf"),
 ]
 # MuJoCo messages that are the source's doing, not a writer's: a referenced file is not on disk
 # (the corpora hold no meshes), or a moving body has no inertia because MuJoCo derives it from

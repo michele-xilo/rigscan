@@ -105,6 +105,21 @@ def test_a_path_outside_the_upload_and_example_folders_is_refused():
     assert "Choose a file" in space.convert("/etc/hosts", "mjcf")["error"]
 
 
+def test_a_binary_that_lost_its_executable_bit_is_still_run():
+    # The Hugging Face upload does not keep file modes.
+    import shutil
+    with tempfile.TemporaryDirectory() as d:
+        copy = Path(d) / "rigscan"
+        shutil.copyfile(os.environ["RIGSCAN_BIN"], copy)
+        copy.chmod(0o644)
+        old = os.environ["RIGSCAN_BIN"]
+        os.environ["RIGSCAN_BIN"] = str(copy)
+        try:
+            assert space.version() not in ("", "unknown")
+        finally:
+            os.environ["RIGSCAN_BIN"] = old
+
+
 def test_no_file_is_an_error():
     assert space.scan(None)["error"]
     assert space.convert(None, "mjcf")["error"]

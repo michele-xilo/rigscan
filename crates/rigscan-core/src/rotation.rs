@@ -25,6 +25,75 @@ pub(crate) fn apply(a: &Mat, v: [f64; 3]) -> [f64; 3] {
     std::array::from_fn(|i| (0..3).map(|k| a[i][k] * v[k]).sum())
 }
 
+/// The quaternion w, x, y, z of a rotation matrix, with w not negative.
+pub(crate) fn to_quat(r: &Mat) -> [f64; 4] {
+    let trace = r[0][0] + r[1][1] + r[2][2];
+    let q = if trace > 0.0 {
+        let s = (trace + 1.0).sqrt() * 2.0;
+        [
+            s / 4.0,
+            (r[2][1] - r[1][2]) / s,
+            (r[0][2] - r[2][0]) / s,
+            (r[1][0] - r[0][1]) / s,
+        ]
+    } else {
+        // The largest diagonal entry keeps the square root away from zero.
+        let i = (0..3).fold(0, |m, k| if r[k][k] > r[m][m] { k } else { m });
+        let (j, k) = ((i + 1) % 3, (i + 2) % 3);
+        let s = (1.0 + r[i][i] - r[j][j] - r[k][k]).sqrt() * 2.0;
+        let mut q = [0.0; 4];
+        q[0] = (r[k][j] - r[j][k]) / s;
+        q[1 + i] = s / 4.0;
+        q[1 + j] = (r[j][i] + r[i][j]) / s;
+        q[1 + k] = (r[k][i] + r[i][k]) / s;
+        q
+    };
+    let norm = q.iter().map(|v| v * v).sum::<f64>().sqrt();
+    let sign = if q[0] < 0.0 { -1.0 } else { 1.0 };
+    q.map(|v| sign * v / norm)
+}
+
+/// A rotation taking the x axis onto the unit vector `a`.
+pub(crate) fn align_x(a: [f64; 3]) -> Mat {
+    let axis = [0.0, -a[2], a[1]];
+    let sin = (axis[1] * axis[1] + axis[2] * axis[2]).sqrt();
+    if sin < TINY {
+        return if a[0] > 0.0 {
+            IDENTITY
+        } else {
+            about(2, std::f64::consts::PI)
+        };
+    }
+    from_axis_angle(axis, sin.atan2(a[0])).unwrap_or(IDENTITY)
+}
+
+/// The eigenvalues of a symmetric matrix and the rotation whose columns are its eigenvectors.
+/// A matrix that is already diagonal comes back as it is, with the identity.
+pub(crate) fn symmetric_eigen(mut a: Mat) -> ([f64; 3], Mat) {
+    let mut v = IDENTITY;
+    let scale = a.iter().flatten().map(|x| x.abs()).fold(0.0, f64::max);
+    for _ in 0..50 {
+        let (p, q) = [(0, 1), (0, 2), (1, 2)].into_iter().fold((0, 1), |m, c| {
+            if a[c.0][c.1].abs() > a[m.0][m.1].abs() {
+                c
+            } else {
+                m
+            }
+        });
+        if a[p][q].abs() <= 1e-15 * scale {
+            break;
+        }
+        let theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q]);
+        let t = theta.signum() / (theta.abs() + (theta * theta + 1.0).sqrt());
+        let (c, s) = (1.0 / (t * t + 1.0).sqrt(), t / (t * t + 1.0).sqrt());
+        let mut turn = IDENTITY;
+        (turn[p][p], turn[q][q], turn[p][q], turn[q][p]) = (c, c, s, -s);
+        a = mul(&transpose(&turn), &mul(&a, &turn));
+        v = mul(&v, &turn);
+    }
+    ([a[0][0], a[1][1], a[2][2]], v)
+}
+
 fn unit(v: [f64; 3]) -> Option<[f64; 3]> {
     let n = v.iter().map(|x| x * x).sum::<f64>().sqrt();
     (n > TINY).then(|| v.map(|x| x / n))
@@ -126,4 +195,48 @@ pub(crate) fn rpy(r: &Mat) -> [f64; 3] {
         return [0.0, pitch, (-r[0][1]).atan2(r[1][1])];
     }
     [r[2][1].atan2(r[2][2]), pitch, r[1][0].atan2(r[0][0])]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn det(m: &Mat) -> f64 {
+        m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+            - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+    }
+
+    #[test]
+    fn align_x_keeps_x_and_turns_minus_x_half_way_round() {
+        assert_eq!(align_x([1.0, 0.0, 0.0]), IDENTITY);
+        let flipped = apply(&align_x([-1.0, 0.0, 0.0]), [1.0, 0.0, 0.0]);
+        assert!((flipped[0] + 1.0).abs() < 1e-12 && flipped[1].abs() < 1e-12);
+    }
+
+    #[test]
+    fn eigenvectors_are_always_a_proper_rotation_of_the_tensor() {
+        for k in 0..40 {
+            let (a, b, c) = (
+                1.0 + k as f64 * 0.37 % 3.0,
+                0.1 * (k % 7) as f64,
+                0.2 * (k % 5) as f64,
+            );
+            let m = [[a + 2.0, b, -c], [b, a + 1.0, c], [-c, c, a + 3.0]];
+            let (d, v) = symmetric_eigen(m);
+            assert!((det(&v) - 1.0).abs() < 1e-9, "{m:?}");
+            let back = mul(
+                &v,
+                &mul(
+                    &[[d[0], 0.0, 0.0], [0.0, d[1], 0.0], [0.0, 0.0, d[2]]],
+                    &transpose(&v),
+                ),
+            );
+            for i in 0..3 {
+                for j in 0..3 {
+                    assert!((back[i][j] - m[i][j]).abs() < 1e-9, "{m:?}");
+                }
+            }
+        }
+    }
 }

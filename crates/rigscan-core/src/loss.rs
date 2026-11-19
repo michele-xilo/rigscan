@@ -37,24 +37,26 @@ pub fn loss_info(id: &str) -> Option<LossInfo> {
 
 const TABLE: &[(&str, LossKind, &str)] = &[
     ("capsule", Dropped, "URDF has no capsule shape; the shape was left out."),
-    ("dynamics", Dropped, "MJCF holds damping and friction only on a moving joint; they were left out."),
+    ("dynamics", Dropped, "The target holds damping and friction only in a form this joint cannot use (MJCF on a moving joint only, USD not at all); they were left out."),
     ("inertial", Dropped, "The target needs both a mass and an inertia tensor; an inertial without both was left out."),
     ("inertial/frame", Changed, "MuJoCo takes a full inertia tensor only in the body frame; the rotated frame was folded into the tensor."),
     ("joint/<type>", Dropped, "The target has no joint of this type; it was written as a fixed joint or left out."),
-    ("joint/floating", Dropped, "MJCF holds a floating joint only on the root; this one was left out."),
+    ("joint/floating", Dropped, "The target holds a floating joint only on the root (MJCF) or not at all (USD); this one was left out."),
     ("joint/multiple", Dropped, "URDF allows one joint into a link; the others were not written."),
     ("joint/name", Dropped, "A fixed joint becomes a weld in MJCF, and a weld has no name."),
     ("joint/origin", Dropped, "Joints into one MJCF body share its pose; this joint's different origin was not kept."),
-    ("joint/planar", Dropped, "MJCF has no planar joint; it was left out."),
+    ("joint/planar", Dropped, "The target has no planar joint; it was written as a fixed joint or left out."),
     ("joint/tree", Dropped, "MJCF is a tree; a joint into a link that already has a parent was not written."),
     ("joint/undefined", Dropped, "The joint's child link is not defined, so there is no body to put it on."),
-    ("limit", Dropped, "MJCF could not keep this limit (a hinge needs both bounds, a fixed or floating joint takes none); it was left out."),
-    ("limit/effort", Dropped, "MJCF has no effort limit on a joint; it was left out."),
+    ("limit", Dropped, "The target could not keep this limit (an MJCF or USD hinge needs both bounds, a fixed or floating joint takes none); it was left out."),
+    ("limit/effort", Dropped, "The target has no effort limit on this joint (MJCF has none, USD holds one only as a positive drive force); it was left out."),
     ("limit/effort/default", Invented, "URDF requires an effort on a limit and the source has none; 0 was written."),
-    ("limit/velocity", Dropped, "MJCF has no velocity limit on a joint; it was left out."),
+    ("limit/velocity", Dropped, "The target has no velocity limit on a joint (MJCF and USD have none); it was left out."),
     ("limit/velocity/default", Invented, "URDF requires a velocity on a limit and the source has none; 0 was written."),
+    ("name", Changed, "A USD prim name must be an identifier (letters, digits, underscores, not starting with a digit); it was rewritten."),
     ("link", Dropped, "No joint chain from a root reaches this link, so it has no place in the MJCF body tree."),
-    ("mimic", Dropped, "MJCF is written without mimic coupling; it was left out."),
+    ("mesh", Dropped, "USD holds a mesh as points and the model keeps only a file name; the shape was left out."),
+    ("mimic", Dropped, "MJCF and USD are written without mimic coupling; it was left out."),
 ];
 
 #[cfg(test)]
@@ -65,7 +67,11 @@ mod tests {
     /// without a description. A format string such as `joint/{t}` is checked as `joint/x`.
     fn writer_ids() -> Vec<String> {
         let mut ids = Vec::new();
-        for src in [include_str!("urdf_write.rs"), include_str!("mjcf_write.rs")] {
+        for src in [
+            include_str!("urdf_write.rs"),
+            include_str!("mjcf_write.rs"),
+            include_str!("usd_write.rs"),
+        ] {
             let code = src.split("#[cfg(test)]").next().unwrap_or(src);
             // A call without a literal id (the definitions) has other code before the quote.
             let literal = |call: &str| call.find('"').filter(|&q| !call[..q].contains([')', '{']));

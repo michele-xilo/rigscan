@@ -17,6 +17,7 @@ mod usd;
 mod usd_map;
 mod usd_rules;
 mod usd_shapes;
+mod usd_write;
 
 pub use files::{Resolution, Resolver};
 pub use lint::{lint, lint_with, Finding, Severity};
@@ -33,3 +34,4 @@ pub use urdf::parse_urdf;
 pub use urdf_write::write_urdf;
 pub use usd::{parse_usd, Usd, UsdBody, UsdJoint, UsdLoader, UsdShape};
 pub use usd_rules::lint_usd;
+pub use usd_write::write_usd;

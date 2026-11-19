@@ -53,7 +53,7 @@ rigscan convert robot.urdf --to mjcf -o robot.xml
 rigscan convert robot.xml --to urdf          # text goes to stdout without -o
 ```
 
-The input can be URDF, MJCF or USD; `--to` is `urdf` or `mjcf`. What the target format cannot hold is listed on
+The input can be URDF, MJCF or USD; `--to` is `urdf`, `mjcf` or `usd`. USD is written as `.usda` text with UsdPhysics: every link is a rigid body under one articulation root, every joint its own prim, shapes are cubes, spheres, cylinders and capsules, and meshes are reported as `mesh` and left out. A link no joint holds is welded to the world, because a USD body is otherwise free. What the target format cannot hold is listed on
 stderr, one line per kind of loss with the names it hit (`lost limit/effort: shoulder, elbow`). The one value
 it makes up is `0` for the `effort` and `velocity` of a revolute or prismatic limit, which URDF requires and MJCF does not
 have; it is reported as `limit/effort/default` and `limit/velocity/default`.

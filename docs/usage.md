@@ -46,6 +46,17 @@ something is wrong, and `--color auto|always|never` controls colour (teal health
 
 USD has no source positions, so findings name the file only and JSON `line` and `column` are `null`.
 
+### Logging
+
+Logs go to stderr, never stdout, so findings are the same with logging on or off. By default only warnings
+show. `-v`, `-vv` and `-vvv` (any command) raise the level to info, debug and trace, and `RUST_LOG` overrides
+them (`RUST_LOG=rigscan_core=debug`). At debug level each file shows the time of its parse, map and lint
+phases and its link, joint and finding counts. `--log-format json` writes one JSON object per line.
+
+```bash
+rigscan -vv scan robot.urdf
+```
+
 ## Convert
 
 ```bash

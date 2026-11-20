@@ -21,6 +21,7 @@ impl Mjcf {
     ///
     /// Every `<joint>` becomes one [`Joint`] from the parent body's link to the body's own, so a
     /// body with several joints keeps them all. A body without a joint is welded by a fixed joint.
+    #[tracing::instrument(name = "map", level = "debug", skip_all, fields(format = "mjcf"))]
     pub fn to_robot(&self) -> Result<Robot, ParseError> {
         let mut m = Mapper::new(self)?;
         m.run(&self.root)?;

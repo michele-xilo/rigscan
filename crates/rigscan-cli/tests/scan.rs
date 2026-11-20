@@ -349,3 +349,67 @@ fn statistics_count_findings_per_rule_across_files_most_frequent_first() {
     );
     assert_eq!(out.status.code(), Some(1));
 }
+
+fn scan_with_env(file: &str, rust_log: &str, extra: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_rigscan"))
+        .env("RUST_LOG", rust_log)
+        .args(extra)
+        .arg("scan")
+        .arg(fixture(file))
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn debug_logging_shows_per_file_timings_and_counts_on_stderr() {
+    let out = scan_with_env("healthy.urdf", "debug", &[]);
+
+    let log = stderr(&out);
+    assert!(log.contains("healthy.urdf"), "{log}");
+    assert!(log.contains("time.busy"), "{log}");
+    assert!(log.contains("links=2"), "{log}");
+}
+
+#[test]
+fn stdout_is_identical_with_and_without_logging() {
+    let quiet = scan_with_env("broken.urdf", "off", &[]);
+    let loud = scan_with_env("broken.urdf", "trace", &[]);
+
+    assert_eq!(stdout(&quiet), stdout(&loud));
+    assert_eq!(quiet.status.code(), loud.status.code());
+}
+
+#[test]
+fn default_run_logs_nothing_on_stderr_for_a_healthy_file() {
+    let out = Command::new(env!("CARGO_BIN_EXE_rigscan"))
+        .env_remove("RUST_LOG")
+        .arg("scan")
+        .arg(fixture("healthy.urdf"))
+        .output()
+        .unwrap();
+
+    assert_eq!(stderr(&out), "All checks passed!\n");
+}
+
+#[test]
+fn json_log_format_writes_one_json_object_per_line_to_stderr() {
+    let out = scan_with_env("healthy.urdf", "debug", &["--log-format", "json"]);
+
+    let log = stderr(&out);
+    let lines: Vec<&str> = log.lines().filter(|l| l.starts_with('{')).collect();
+    assert!(!lines.is_empty(), "{log}");
+    assert!(lines.iter().all(|l| l.ends_with('}')), "{log}");
+    assert_eq!(stdout(&out), "");
+}
+
+#[test]
+fn verbose_flag_enables_debug_without_rust_log() {
+    let out = Command::new(env!("CARGO_BIN_EXE_rigscan"))
+        .env_remove("RUST_LOG")
+        .args(["-vv", "scan"])
+        .arg(fixture("healthy.urdf"))
+        .output()
+        .unwrap();
+
+    assert!(stderr(&out).contains("time.busy"), "{}", stderr(&out));
+}

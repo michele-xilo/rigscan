@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 quick-xml = "0.42.0"
 openusd = "=0.8.0"
+tracing = { version = "0.1.41", default-features = false, features = ["attributes"] }
 
 [dev-dependencies]
 criterion = "0.8.2"

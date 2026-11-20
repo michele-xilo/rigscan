@@ -8,6 +8,7 @@ use quick_xml::events::BytesStart;
 use std::borrow::Cow;
 
 /// Parse a URDF document, keeping the source span of every link and joint.
+#[tracing::instrument(name = "parse", level = "debug", skip_all, fields(format = "urdf"))]
 pub fn parse_urdf(src: &str) -> Result<Robot, ParseError> {
     use quick_xml::events::Event;
     use quick_xml::Reader;

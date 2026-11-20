@@ -14,6 +14,7 @@ impl Usd {
     /// Map the bodies and joints onto the neutral model. A body is a link named by its prim path,
     /// and a joint connects `body0` to `body1`; a missing end is the world. Nothing is added to
     /// the structure beyond that root link.
+    #[tracing::instrument(name = "map", level = "debug", skip_all, fields(format = "usd"))]
     pub fn to_robot(&self) -> Result<Robot, ParseError> {
         let mut robot = Robot::new(Format::Usd);
         robot.span = Span::NONE;

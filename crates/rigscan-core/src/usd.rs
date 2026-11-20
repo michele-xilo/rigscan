@@ -83,6 +83,7 @@ pub struct Usd {
 
 /// Open the stage at `root`, composing every layer it pulls in through `loader`, and read the
 /// UsdPhysics bodies and joints.
+#[tracing::instrument(name = "parse", level = "debug", skip_all, fields(format = "usd"))]
 pub fn parse_usd(root: &str, loader: impl UsdLoader + 'static) -> Result<Usd, ParseError> {
     let resolver = LoaderResolver {
         loader: Box::new(loader),

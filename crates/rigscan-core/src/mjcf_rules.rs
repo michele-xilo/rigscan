@@ -8,6 +8,7 @@ use crate::model::{Element, Robot};
 use std::collections::HashSet;
 
 /// The shared rules on `robot` (mapped from `mjcf`) plus the MJCF-specific ones.
+#[tracing::instrument(name = "lint", level = "debug", skip_all, fields(format = "mjcf"))]
 pub fn lint_mjcf(mjcf: &Mjcf, robot: &Robot, resolver: &dyn Resolver) -> Vec<Finding> {
     let mut out = lint_with(robot, resolver);
     // RS016

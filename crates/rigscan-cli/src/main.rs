@@ -19,8 +19,21 @@ use std::rc::Rc;
 #[derive(Parser)]
 #[command(version, about = "A health check for robot descriptions")]
 struct Cli {
+    /// More log detail on stderr: -v info, -vv debug, -vvv trace; RUST_LOG overrides
+    #[arg(short, long, action = clap::ArgAction::Count, global = true)]
+    verbose: u8,
+    /// How log lines are written to stderr
+    #[arg(long, value_enum, default_value_t = LogFormat::Human, global = true)]
+    log_format: LogFormat,
     #[command(subcommand)]
     command: Command,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum LogFormat {
+    Human,
+    /// One JSON object per line
+    Json,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -81,8 +94,27 @@ enum Command {
     },
 }
 
+/// Logs go to stderr only, so stdout stays exactly the findings. Span timings are printed when a
+/// span closes, which is what gives each phase of each file its duration.
+fn init_logging(verbose: u8, format: LogFormat) {
+    use tracing_subscriber::fmt::format::FmtSpan;
+    use tracing_subscriber::EnvFilter;
+    let level = ["warn", "info", "debug", "trace"][usize::from(verbose.min(3))];
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(level));
+    let builder = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .with_span_events(FmtSpan::CLOSE);
+    match format {
+        LogFormat::Human => builder.with_ansi(std::io::stderr().is_terminal()).init(),
+        LogFormat::Json => builder.json().init(),
+    }
+}
+
 fn main() -> ExitCode {
-    match Cli::parse().command {
+    let cli = Cli::parse();
+    init_logging(cli.verbose, cli.log_format);
+    match cli.command {
         Command::Scan {
             paths,
             output_format,
@@ -375,6 +407,7 @@ fn write_output(
     Ok(())
 }
 
+#[tracing::instrument(level = "debug", skip_all, fields(path = %path.display()))]
 fn scan_file(path: &Path) -> Result<Scanned, String> {
     let format =
         detect_format(path).ok_or_else(|| format!("{}: unsupported file type", path.display()))?;
@@ -419,6 +452,12 @@ fn scan_file(path: &Path) -> Result<Scanned, String> {
             (robot, findings, included)
         }
     };
+    tracing::debug!(
+        links = robot.links.len(),
+        joints = robot.joints.len(),
+        findings = findings.len(),
+        "scanned"
+    );
     Ok(Scanned {
         src,
         robot,

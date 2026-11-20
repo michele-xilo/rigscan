@@ -24,6 +24,7 @@ pub fn lint(robot: &Robot) -> Vec<Finding> {
 }
 
 /// Like [`lint`], and also checks that the files the robot references exist, asking `resolver`.
+#[tracing::instrument(name = "lint", level = "debug", skip_all)]
 pub fn lint_with(robot: &Robot, resolver: &dyn Resolver) -> Vec<Finding> {
     let mut findings = Vec::new();
     // RS001: joint references a link that is not defined.

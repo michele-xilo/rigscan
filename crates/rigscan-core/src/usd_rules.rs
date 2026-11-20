@@ -5,6 +5,7 @@ use crate::model::{Element, Robot, Span};
 use crate::usd::Usd;
 
 /// The shared rules on `robot` (mapped from `usd`) plus the USD-specific ones.
+#[tracing::instrument(name = "lint", level = "debug", skip_all, fields(format = "usd"))]
 pub fn lint_usd(usd: &Usd, robot: &Robot) -> Vec<Finding> {
     let mut out = lint(robot);
     self_joints(robot, &mut out);

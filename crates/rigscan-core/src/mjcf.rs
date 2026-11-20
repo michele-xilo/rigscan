@@ -72,6 +72,7 @@ const MAX_INCLUDE_DEPTH: usize = 16;
 const MAX_NESTING: usize = 256;
 
 /// Parse an MJCF document, splicing in `include`d files and applying `default` classes.
+#[tracing::instrument(name = "parse", level = "debug", skip_all, fields(format = "mjcf"))]
 pub fn parse_mjcf(src: &str, loader: &dyn IncludeLoader) -> Result<Mjcf, ParseError> {
     let mut root = read_tree(src, None, 0)?;
     if root.tag != "mujoco" {
